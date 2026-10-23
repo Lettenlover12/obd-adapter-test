@@ -44,7 +44,7 @@
 </head>
 <body>
 <main>
-  <h1>OBD Adapter-Test <span class="muted">v8</span></h1>
+  <h1>OBD Adapter-Test <span class="muted">v9</span></h1>
   <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
     Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
 
@@ -100,7 +100,7 @@
 // open services listed up front, so this list is deliberately broad.
 // Full 128-bit strings only: some iOS Web Bluetooth browsers reject numeric
 // or named UUIDs.
-const VERSION = 'v8';
+const VERSION = 'v9';
 const OAD_SERVICE_PREFIX = 'f000ffc0';
 const short = (n) => `0000${n}-0000-1000-8000-00805f9b34fb`;
 const KNOWN_SERVICES = [
@@ -406,6 +406,10 @@ async function bmwRequest(ecu, ...service) {
     const got = await ask(req, pending ? 2 : 1);
     pending = got.some(isPending);
     frames = got.filter((f) => !isPending(f));
+    // An ECU may send "7F <sid> 21" (busy) and then the real answer in the
+    // same window; keep the negative reply only if nothing else came.
+    const positive = frames.filter((f) => !(f.data[0] >> 4 === 0 && f.data[1] === 0x7F));
+    if (positive.length) frames = positive;
     if (!frames.length && !pending && attempt) break;
   }
   const first = frames.find((f) => f.data[0] >> 4 === 1);
@@ -478,7 +482,7 @@ async function bmwScan() {
     } else if (!dtcs.length) {
       html = '<span style="color:var(--ok)">keine Fehler</span>';
     } else {
-      html = dtcs.map((d) => `<span class="dtc" title="${d.active ? 'aktuell aktiv' : 'gespeichert'}">${d.code}${d.active ? ' ●' : ''}</span>`).join('');
+      html = dtcs.map((d) => `<span class="dtc">${d.code} <span class="muted">${d.active ? '● aktiv' : 'gespeichert'}</span></span>`).join('');
     }
     log(`0x${ecu} ${name}: ${dtcs == null ? 'nicht lesbar' : dtcs.length + ' Fehler'}${dtcs?.length ? ' – ' + dtcs.map((d) => d.code).join(', ') : ''}`);
     const div = document.createElement('div');
@@ -487,7 +491,7 @@ async function bmwScan() {
     box.appendChild(div);
   }
   if (!ecus.length) box.innerHTML = '<span class="muted">Keine Steuergeräte gefunden. Zündung an?</span>';
-  else box.insertAdjacentHTML('beforeend', '<p class="muted">● = Fehler ist gerade aktiv. Codes sind BMW-Fehlercodes (hex).</p>');
+  else box.insertAdjacentHTML('beforeend', '<p class="muted">● aktiv = Fehler liegt gerade an. Gespeichert = trat früher auf. Codes sind BMW-Fehlercodes (hex).</p>');
   await send('ATZ', 8000);
   protocol = null;
   log(`--- BMW fertig: ${ecus.length} Steuergerät(e) ---`);
