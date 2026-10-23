@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OBD Adapter-Test</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #646b78;
+    --line: #dde1e7; --accent: #1f6feb; --ok: #1a7f37; --err: #cf222e; --code: #f0f2f5;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f1115; --card: #171a21; --text: #e6e8ec; --muted: #9aa1ad;
+      --line: #2a2f39; --accent: #4c8dff; --ok: #3fb950; --err: #f85149; --code: #11141a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 20px; margin: 4px 0 2px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  p.sub { color: var(--muted); margin: 0 0 16px; }
+  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 14px; margin-bottom: 14px; }
+  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
+    border-radius: 9px; padding: 9px 12px; cursor: pointer; }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button:disabled { opacity: .45; cursor: default; }
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  input[type=text] { font: inherit; flex: 1; min-width: 0; padding: 9px 10px; border-radius: 9px;
+    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
+  #status { font-weight: 600; }
+  #status.ok { color: var(--ok); } #status.err { color: var(--err); }
+  pre { background: var(--code); border-radius: 9px; padding: 10px; margin: 0; overflow-x: auto;
+    font: 12.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap;
+    word-break: break-word; max-height: 360px; overflow-y: auto; }
+  .muted { color: var(--muted); font-size: 13px; }
+  .dtc { display: inline-block; font-family: ui-monospace, Consolas, monospace; font-weight: 600;
+    padding: 3px 8px; border-radius: 6px; background: var(--code); margin: 2px 4px 2px 0; }
+  label.small { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>OBD Adapter-Test</h1>
+  <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
+    Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
+
+  <section>
+    <h2>1 · Verbinden</h2>
+    <label class="small" for="extra">Zusätzliche Service-UUIDs (optional, durch Komma getrennt)</label>
+    <div class="row" style="margin-bottom:10px">
+      <input type="text" id="extra" placeholder="z. B. 0000abcd-0000-1000-8000-00805f9b34fb">
+    </div>
+    <div class="row">
+      <button class="primary" id="connect">Adapter suchen</button>
+      <button id="disconnect" disabled>Trennen</button>
+      <span id="status">Nicht verbunden</span>
+    </div>
+  </section>
+
+  <section>
+    <h2>2 · Befehle</h2>
+    <div class="row" style="margin-bottom:10px">
+      <button data-cmd="init" disabled>Initialisieren</button>
+      <button data-cmd="ATI" disabled>ATI (Chip)</button>
+      <button data-cmd="ATRV" disabled>Batteriespannung</button>
+      <button data-cmd="0100" disabled>Unterstützte PIDs</button>
+      <button data-cmd="vin" disabled>VIN</button>
+      <button data-cmd="dtc" disabled>Fehlercodes lesen</button>
+    </div>
+    <div class="row">
+      <input type="text" id="raw" placeholder="Eigener Befehl, z. B. 010C" disabled>
+      <button id="send" disabled>Senden</button>
+    </div>
+    <div id="dtcs" style="margin-top:10px"></div>
+  </section>
+
+  <section>
+    <h2>3 · Protokoll</h2>
+    <pre id="log"></pre>
+    <div class="row" style="margin-top:10px">
+      <button id="copy">Protokoll kopieren</button>
+      <button id="clear">Leeren</button>
+      <span class="muted">Schick mir das Protokoll, dann weiß ich, wie der Adapter antwortet.</span>
+    </div>
+  </section>
+</main>
+
+<script>
+// Services that common BLE OBD adapters expose. Web Bluetooth only lets us
+// open services listed up front, so this list is deliberately broad.
+const KNOWN_SERVICES = [
+  0xfff0, 0xffe0, 0x18f0, 0xffb0, 0xfee7, 0xae30, 0xbeef,
+  'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
+  '0000ffe0-0000-1000-8000-00805f9b34fb',
+  '49535343-fe7d-4ae5-8fa9-9fafd205e455',
+  '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+  'device_information', 'battery_service', 'generic_access',
+];
+
+const $ = (id) => document.getElementById(id);
+const logEl = $('log');
+let device, tx, rx, buffer = '', waiter = null, protocol = null;
+
+function log(line) {
+  const t = new Date().toLocaleTimeString('de-DE');
+  logEl.textContent += `[${t}] ${line}\n`;
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+function setStatus(text, cls = '') {
+  $('status').textContent = text;
+  $('status').className = cls;
+}
+
+function setConnected(on) {
+  $('connect').disabled = on;
+  $('disconnect').disabled = !on;
+  document.querySelectorAll('[data-cmd], #raw, #send').forEach((el) => {
+    el.disabled = !(on && tx && rx);
+  });
+}
+
+function propsOf(c) {
+  const p = c.properties;
+  return ['read', 'write', 'writeWithoutResponse', 'notify', 'indicate'].filter((k) => p[k]).join(', ');
+}
+
+async function connect() {
+  if (!navigator.bluetooth) {
+    setStatus('Dieser Browser kann kein Bluetooth. Auf dem iPhone: Bluefy verwenden.', 'err');
+    return;
+  }
+  const extra = $('extra').value.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  try {
+    device = await navigator.bluetooth.requestDevice({
+      acceptAllDevices: true,
+      optionalServices: [...KNOWN_SERVICES, ...extra],
+    });
+    device.addEventListener('gattserverdisconnected', () => {
+      log('Verbindung getrennt.');
+      tx = rx = null;
+      setStatus('Nicht verbunden');
+      setConnected(false);
+    });
+    log(`Gerät gewählt: ${device.name || '(ohne Namen)'} · id ${device.id}`);
+    setStatus('Verbinde …');
+    const server = await device.gatt.connect();
+    const services = await server.getPrimaryServices();
+    log(`${services.length} Service(s) zugänglich:`);
+
+    let candidates = [];
+    for (const s of services) {
+      log(`  Service ${s.uuid}`);
+      let chars = [];
+      try { chars = await s.getCharacteristics(); } catch (e) { log(`    (Characteristics nicht lesbar: ${e.message})`); }
+      const notify = chars.filter((c) => c.properties.notify || c.properties.indicate);
+      const write = chars.filter((c) => c.properties.write || c.properties.writeWithoutResponse);
+      for (const c of chars) log(`    Char ${c.uuid} [${propsOf(c)}]`);
+      if (notify.length && write.length) candidates.push({ s, rx: notify[0], tx: write[0] });
+    }
+
+    // Prefer a vendor service over the standard ones (0x18xx are SIG-defined).
+    candidates.sort((a, b) => Number(a.s.uuid.startsWith('000018')) - Number(b.s.uuid.startsWith('000018')));
+    if (!candidates.length) {
+      setStatus('Verbunden, aber kein Daten-Kanal gefunden', 'err');
+      log('Kein Service mit Schreib- und Benachrichtigungs-Characteristic gefunden.');
+      log('Tipp: Mit "nRF Connect" (App Store) die Service-UUIDs des Adapters ansehen und oben eintragen.');
+      setConnected(true);
+      return;
+    }
+    ({ tx, rx } = candidates[0]);
+    await rx.startNotifications();
+    rx.addEventListener('characteristicvaluechanged', onData);
+    log(`Daten-Kanal: senden über ${tx.uuid}, empfangen über ${rx.uuid}`);
+    setStatus(`Verbunden: ${device.name || 'Adapter'}`, 'ok');
+    setConnected(true);
+  } catch (e) {
+    log(`Fehler: ${e.message}`);
+    setStatus(e.name === 'NotFoundError' ? 'Abgebrochen' : 'Verbindung fehlgeschlagen', 'err');
+  }
+}
+
+function onData(ev) {
+  const bytes = new Uint8Array(ev.target.value.buffer);
+  const text = new TextDecoder().decode(bytes);
+  const printable = /^[\x09\x0a\x0d\x20-\x7e]*$/.test(text);
+  if (!printable) {
+    log(`<- (binär) ${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
+  }
+  buffer += text;
+  // ELM327 ends every reply with the ">" prompt.
+  if (buffer.includes('>') && waiter) {
+    const reply = buffer.slice(0, buffer.indexOf('>'));
+    buffer = buffer.slice(buffer.indexOf('>') + 1);
+    waiter(reply);
+  }
+}
+
+function send(cmd, timeout = 6000) {
+  return new Promise(async (resolve) => {
+    buffer = '';
+    const timer = setTimeout(() => {
+      waiter = null;
+      log(`<- (keine Antwort mit ">" nach ${timeout / 1000}s) ${JSON.stringify(buffer)}`);
+      resolve(null);
+    }, timeout);
+    waiter = (reply) => {
+      clearTimeout(timer);
+      waiter = null;
+      const clean = reply.replace(/\r/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean);
+      log(`<- ${clean.join(' | ') || '(leer)'}`);
+      resolve(clean);
+    };
+    log(`-> ${cmd}`);
+    const data = new TextEncoder().encode(cmd + '\r');
+    try {
+      if (tx.properties.writeWithoutResponse) await tx.writeValueWithoutResponse(data);
+      else await tx.writeValueWithResponse(data);
+    } catch (e) {
+      clearTimeout(timer);
+      waiter = null;
+      log(`Senden fehlgeschlagen: ${e.message}`);
+      resolve(null);
+    }
+  });
+}
+
+async function init() {
+  await send('ATZ', 8000);
+  for (const c of ['ATE0', 'ATL0', 'ATS1', 'ATH0', 'ATSP0']) await send(c);
+  await send('0100', 15000);
+  const dp = await send('ATDPN');
+  protocol = dp && dp[0] ? parseInt(dp[0].replace(/^A/, ''), 16) : null;
+  log(`Protokoll: ${protocol ?? 'unbekannt'}${protocol >= 6 && protocol <= 9 ? ' (CAN)' : ''}`);
+}
+
+// Mode 03 reply → DTC strings like "P0133". CAN replies carry a count byte
+// after the 43; older protocols always pad to three codes per line.
+function parseDtcs(lines) {
+  const codes = [];
+  const isCan = protocol >= 6 && protocol <= 9;
+  for (const line of lines) {
+    const hex = line.replace(/[^0-9A-Fa-f]/g, '');
+    const at = hex.toUpperCase().indexOf('43');
+    if (at < 0) continue;
+    let body = hex.slice(at + 2);
+    if (isCan) body = body.slice(2);
+    for (let i = 0; i + 4 <= body.length; i += 4) {
+      const w = parseInt(body.slice(i, i + 4), 16);
+      if (!w) continue;
+      const sys = 'PCBU'[w >> 14];
+      codes.push(sys + ((w >> 12) & 3) + (w & 0x0fff).toString(16).toUpperCase().padStart(3, '0'));
+    }
+  }
+  return [...new Set(codes)];
+}
+
+async function readDtcs() {
+  if (protocol == null) await init();
+  const stored = (await send('03', 15000)) || [];
+  const pending = (await send('07', 15000)) || [];
+  const box = $('dtcs');
+  const s = parseDtcs(stored);
+  const p = parseDtcs(pending.map((l) => l.replace(/^47/, '43')));
+  box.innerHTML = '';
+  const add = (title, list) => {
+    const div = document.createElement('div');
+    div.innerHTML = `<b>${title}:</b> ` + (list.length ? list.map((c) => `<span class="dtc">${c}</span>`).join('') : 'keine');
+    box.appendChild(div);
+  };
+  add('Gespeichert', s);
+  add('Ausstehend', p);
+}
+
+async function readVin() {
+  if (protocol == null) await init();
+  const lines = (await send('0902', 15000)) || [];
+  const hex = lines.join('').replace(/[^0-9A-Fa-f]/g, '');
+  const ascii = (hex.match(/.{2}/g) || []).map((h) => parseInt(h, 16))
+    .filter((b) => b >= 0x30 && b <= 0x5a).map((b) => String.fromCharCode(b)).join('');
+  const vin = ascii.slice(-17);
+  log(`VIN (geschätzt): ${vin.length === 17 ? vin : 'nicht erkannt'}`);
+}
+
+document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', async () => {
+  const cmd = b.dataset.cmd;
+  b.disabled = true;
+  try {
+    if (cmd === 'init') await init();
+    else if (cmd === 'dtc') await readDtcs();
+    else if (cmd === 'vin') await readVin();
+    else await send(cmd, 10000);
+  } finally { b.disabled = false; }
+}));
+
+$('send').addEventListener('click', async () => {
+  const v = $('raw').value.trim();
+  if (v) await send(v, 10000);
+});
+$('raw').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('send').click(); });
+$('connect').addEventListener('click', connect);
+$('disconnect').addEventListener('click', () => device?.gatt?.disconnect());
+$('clear').addEventListener('click', () => { logEl.textContent = ''; });
+$('copy').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(logEl.textContent); log('Protokoll kopiert.'); }
+  catch { log('Kopieren nicht möglich – bitte Text markieren.'); }
+});
+
+log(navigator.bluetooth ? 'Web Bluetooth verfügbar.' : 'Web Bluetooth NICHT verfügbar (Safari/Firefox). Bluefy oder Chrome nutzen.');
+</script>
+</body>
+</html>
