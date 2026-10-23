@@ -136,6 +136,7 @@ async function connect() {
     return;
   }
   const extra = $('extra').value.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  let stage = 'Gerätewahl';
   try {
     device = await navigator.bluetooth.requestDevice({
       acceptAllDevices: true,
@@ -149,7 +150,9 @@ async function connect() {
     });
     log(`Gerät gewählt: ${device.name || '(ohne Namen)'} · id ${device.id}`);
     setStatus('Verbinde …');
+    stage = 'Verbindungsaufbau';
     const server = await device.gatt.connect();
+    stage = 'Service-Suche';
     const services = await server.getPrimaryServices();
     log(`${services.length} Service(s) zugänglich:`);
 
@@ -180,8 +183,15 @@ async function connect() {
     setStatus(`Verbunden: ${device.name || 'Adapter'}`, 'ok');
     setConnected(true);
   } catch (e) {
-    log(`Fehler: ${e.message}`);
-    setStatus(e.name === 'NotFoundError' ? 'Abgebrochen' : 'Verbindung fehlgeschlagen', 'err');
+    log(`Fehler bei ${stage}: ${e.name}: ${e.message}`);
+    if (stage === 'Gerätewahl' && e.name === 'NotFoundError') {
+      setStatus('Abgebrochen', 'err');
+    } else if (stage === 'Service-Suche') {
+      setStatus('Verbunden, aber keine bekannten Dienste. UUIDs mit nRF Connect ermitteln und oben eintragen.', 'err');
+      log('Der Adapter nutzt Service-UUIDs, die nicht in der Liste stehen.');
+    } else {
+      setStatus(`Fehler bei ${stage}: ${e.message}`, 'err');
+    }
   }
 }
 
