@@ -44,7 +44,7 @@
 </head>
 <body>
 <main>
-  <h1>OBD Adapter-Test <span class="muted">v7</span></h1>
+  <h1>OBD Adapter-Test <span class="muted">v8</span></h1>
   <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
     Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
 
@@ -100,7 +100,7 @@
 // open services listed up front, so this list is deliberately broad.
 // Full 128-bit strings only: some iOS Web Bluetooth browsers reject numeric
 // or named UUIDs.
-const VERSION = 'v7';
+const VERSION = 'v8';
 const OAD_SERVICE_PREFIX = 'f000ffc0';
 const short = (n) => `0000${n}-0000-1000-8000-00805f9b34fb`;
 const KNOWN_SERVICES = [
@@ -253,12 +253,23 @@ function send(cmd, timeout = 6000) {
   });
 }
 
+// The adapter sometimes answers every command with something other than ELM
+// output (seen: echo + "Health360"). Stop early instead of sending a scan.
+async function resetElm() {
+  const r = await send('ATZ', 8000);
+  if (r && r.some((l) => l.includes('ELM327'))) return true;
+  log(`Adapter antwortet nicht als ELM327 (${JSON.stringify(r)}). Abbruch.`);
+  setStatus('Adapter ist nicht im ELM327-Modus – siehe Protokoll', 'err');
+  return false;
+}
+
 async function init() {
-  await send('ATZ', 8000);
+  if (!(await resetElm())) return false;
   for (const c of ['ATE0', 'ATL0', 'ATS1', 'ATH0', 'ATSP0']) await send(c);
   await send('0100', 15000);
   const dp = await send('ATDPN');
-  protocol = dp && dp[0] ? parseInt(dp[0].replace(/^A/, ''), 16) : null;
+  const n = dp && dp[0] ? parseInt(dp[0].replace(/^A/, ''), 16) : NaN;
+  protocol = Number.isNaN(n) ? null : n;
   log(`Protokoll: ${protocol ?? 'unbekannt'}${protocol >= 6 && protocol <= 9 ? ' (CAN)' : ''}`);
 }
 
@@ -307,7 +318,7 @@ function parseDtcs(lines, sid) {
 }
 
 async function readDtcs() {
-  if (protocol == null) await init();
+  if (protocol == null && (await init()) === false) return;
   const stored = (await send('03', 15000)) || [];
   const pending = (await send('07', 15000)) || [];
   const box = $('dtcs');
@@ -324,7 +335,7 @@ async function readDtcs() {
 }
 
 async function readVin() {
-  if (protocol == null) await init();
+  if (protocol == null && (await init()) === false) return;
   const lines = (await send('0902', 15000)) || [];
   const p = payload(lines, 0x49);
   const vin = p ? String.fromCharCode(...p.slice(3).filter((b) => b >= 0x30 && b <= 0x5a)) : '';
@@ -419,11 +430,13 @@ function bmwDtcs(p) {
 }
 
 async function bmwSetup() {
-  for (const c of ['ATZ', 'ATE0', 'ATL0', 'ATS1', 'ATH1', 'ATSP6', 'ATCAF0',
+  if (!(await resetElm())) return false;
+  for (const c of ['ATE0', 'ATL0', 'ATS1', 'ATH1', 'ATSP6', 'ATCAF0',
     'ATSH6F1', 'ATCF600', 'ATCM700', 'ATSTFF']) {
-    const r = await send(c, c === 'ATZ' ? 8000 : 4000);
+    const r = await send(c, 4000);
     if (r && r.some((l) => l.includes('?'))) log(`Hinweis: Adapter kennt "${c}" nicht.`);
   }
+  return true;
 }
 
 async function bmwDiscover() {
@@ -445,7 +458,10 @@ async function bmwScan() {
   log('--- BMW: Steuergeräte und Fehlerspeicher (nur lesen) ---');
   const box = $('bmw');
   box.innerHTML = '<span class="muted">Suche Steuergeräte …</span>';
-  await bmwSetup();
+  if (!(await bmwSetup())) {
+    box.innerHTML = '<span style="color:var(--err)">Adapter ist nicht im ELM327-Modus.</span>';
+    return;
+  }
   const ecus = await bmwDiscover();
   box.innerHTML = '';
   for (const ecu of ecus) {
