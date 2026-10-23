@@ -44,7 +44,7 @@
 </head>
 <body>
 <main>
-  <h1>OBD Adapter-Test <span class="muted">v9</span></h1>
+  <h1>OBD Adapter-Test <span class="muted">v10</span></h1>
   <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
     Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
 
@@ -82,6 +82,11 @@
   <section>
     <h2>BMW-Fehlerspeicher</h2>
     <div id="bmw"><span class="muted">Noch nicht ausgelesen.</span></div>
+    <div class="row" style="margin-top:12px">
+      <button data-cmd="clear" disabled>Fehlerspeicher löschen</button>
+    </div>
+    <p class="muted" style="margin:8px 0 0">Löscht die Fehlerspeicher aller Steuergeräte und liest danach neu aus.
+      Fehler, die gerade aktiv sind, kommen sofort wieder. Zum Bestätigen zweimal tippen.</p>
   </section>
 
   <section>
@@ -100,7 +105,7 @@
 // open services listed up front, so this list is deliberately broad.
 // Full 128-bit strings only: some iOS Web Bluetooth browsers reject numeric
 // or named UUIDs.
-const VERSION = 'v9';
+const VERSION = 'v10';
 const OAD_SERVICE_PREFIX = 'f000ffc0';
 const short = (n) => `0000${n}-0000-1000-8000-00805f9b34fb`;
 const KNOWN_SERVICES = [
@@ -346,7 +351,8 @@ async function readVin() {
 // go out on 0x6F1 with the ECU address as first data byte; answers come back
 // on 0x600 + address with 0xF1 first. This adapter ignores ATCEA, so CAN
 // auto-formatting is switched off and ISO-TP is done by hand. Only
-// TesterPresent (3E) and ReadDTCInformation (19) are sent — nothing writes.
+// Scans send only TesterPresent (3E) and ReadDTCInformation (19); bmwClear
+// is the one place that writes (14 ClearDiagnosticInformation).
 const ECU_NAMES = {
   '01': 'Airbag (ACSM)', '10': 'Gateway (ZGW)', '12': 'Motor (DME/DDE)',
   '18': 'Getriebe (EGS)', '29': 'DSC (ABS/ESP)', '30': 'Lenkung (EPS)',
@@ -458,6 +464,26 @@ async function bmwDiscover() {
   return [...found].sort();
 }
 
+let lastEcus = [];
+
+// ClearDiagnosticInformation (14 FF FF FF = all groups) on every ECU found by
+// the last scan, plus the DME, which does not always answer the broadcast.
+// This is the only service on the page that changes anything in the car.
+async function bmwClear() {
+  log('--- BMW: Fehlerspeicher löschen ---');
+  if (!(await bmwSetup())) return;
+  const ecus = [...new Set([...(lastEcus.length ? lastEcus : await bmwDiscover()), '12'])].sort();
+  let cleared = 0;
+  for (const ecu of ecus) {
+    const r = await bmwRequest(ecu, '14', 'FF', 'FF', 'FF');
+    const ok = r?.data[0] === 0x54;
+    if (ok) cleared++;
+    log(`0x${ecu} ${ECU_NAMES[ecu] || ''}: ${ok ? 'gelöscht ✓' : `nicht gelöscht (${r ? r.data.map(hex2).join(' ') : 'keine Antwort'})`}`);
+  }
+  log(`--- Gelöscht: ${cleared} von ${ecus.length} – lese neu aus ---`);
+  await bmwScan();
+}
+
 async function bmwScan() {
   log('--- BMW: Steuergeräte und Fehlerspeicher (nur lesen) ---');
   const box = $('bmw');
@@ -467,6 +493,7 @@ async function bmwScan() {
     return;
   }
   const ecus = await bmwDiscover();
+  lastEcus = ecus;
   box.innerHTML = '';
   for (const ecu of ecus) {
     const name = ECU_NAMES[ecu] || `Steuergerät 0x${ecu}`;
@@ -497,14 +524,30 @@ async function bmwScan() {
   log(`--- BMW fertig: ${ecus.length} Steuergerät(e) ---`);
 }
 
+// Clearing needs a second tap within 5 s; no confirm() because not every iOS
+// Bluetooth browser shows native dialogs.
+const CLEAR_LABEL = 'Fehlerspeicher löschen';
+let clearArmedAt = 0;
+
 document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', async () => {
   const cmd = b.dataset.cmd;
+  if (cmd === 'clear') {
+    if (Date.now() - clearArmedAt > 5000) {
+      clearArmedAt = Date.now();
+      b.textContent = 'Sicher? Nochmal tippen zum Löschen';
+      setTimeout(() => { if (Date.now() - clearArmedAt >= 5000) b.textContent = CLEAR_LABEL; }, 5000);
+      return;
+    }
+    clearArmedAt = 0;
+    b.textContent = CLEAR_LABEL;
+  }
   b.disabled = true;
   try {
     if (cmd === 'init') await init();
     else if (cmd === 'dtc') await readDtcs();
     else if (cmd === 'vin') await readVin();
     else if (cmd === 'bmw') await bmwScan();
+    else if (cmd === 'clear') await bmwClear();
     else await send(cmd, 10000);
   } finally { b.disabled = false; }
 }));
