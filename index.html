@@ -259,7 +259,7 @@ async function resetElm() {
   const r = await send('ATZ', 8000);
   if (r && r.some((l) => l.includes('ELM327'))) return true;
   log(`Adapter antwortet nicht als ELM327 (${JSON.stringify(r)}). Abbruch.`);
-  setStatus('Adapter ist nicht im ELM327-Modus – siehe Protokoll', 'err');
+  setStatus('Adapter hängt im „Health“-Modus: 30 s ausstecken, wieder einstecken, neu verbinden.', 'err');
   return false;
 }
 
@@ -459,7 +459,7 @@ async function bmwScan() {
   const box = $('bmw');
   box.innerHTML = '<span class="muted">Suche Steuergeräte …</span>';
   if (!(await bmwSetup())) {
-    box.innerHTML = '<span style="color:var(--err)">Adapter ist nicht im ELM327-Modus.</span>';
+    box.innerHTML = '<span style="color:var(--err)">Adapter ist nicht im ELM327-Modus. 30 s ausstecken, wieder einstecken, neu verbinden.</span>';
     return;
   }
   const ecus = await bmwDiscover();
