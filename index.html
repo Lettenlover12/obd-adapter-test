@@ -44,7 +44,7 @@
 </head>
 <body>
 <main>
-  <h1>OBD Adapter-Test <span class="muted">v4</span></h1>
+  <h1>OBD Adapter-Test <span class="muted">v5</span></h1>
   <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
     Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
 
@@ -95,7 +95,8 @@
 // open services listed up front, so this list is deliberately broad.
 // Full 128-bit strings only: some iOS Web Bluetooth browsers reject numeric
 // or named UUIDs.
-const VERSION = 'v4';
+const VERSION = 'v5';
+const OAD_SERVICE_PREFIX = 'f000ffc0';
 const short = (n) => `0000${n}-0000-1000-8000-00805f9b34fb`;
 const KNOWN_SERVICES = [
   ...['fff0', 'ffe0', '18f0', 'ffb0', 'fee7', 'ae30', 'beef', '180a', '180f'].map(short),
@@ -171,8 +172,11 @@ async function connect() {
       if (notify.length && write.length) candidates.push({ s, rx: notify[0], tx: write[0] });
     }
 
-    // Prefer a vendor service over the standard ones (0x18xx are SIG-defined).
-    candidates.sort((a, b) => Number(a.s.uuid.startsWith('000018')) - Number(b.s.uuid.startsWith('000018')));
+    // Never talk to the TI firmware-update (OAD) service: writing OBD commands
+    // there could damage the adapter. Prefer the classic FFE0 serial service.
+    candidates = candidates.filter((c) => !c.s.uuid.toLowerCase().startsWith(OAD_SERVICE_PREFIX));
+    candidates.sort((a, b) => Number(b.s.uuid.toLowerCase() === short('ffe0'))
+      - Number(a.s.uuid.toLowerCase() === short('ffe0')));
     if (!candidates.length) {
       setStatus('Verbunden, aber kein Daten-Kanal gefunden', 'err');
       log('Kein Service mit Schreib- und Benachrichtigungs-Characteristic gefunden.');
@@ -253,25 +257,48 @@ async function init() {
   log(`Protokoll: ${protocol ?? 'unbekannt'}${protocol >= 6 && protocol <= 9 ? ' (CAN)' : ''}`);
 }
 
-// Mode 03 reply → DTC strings like "P0133". CAN replies carry a count byte
-// after the 43; older protocols always pad to three codes per line.
-function parseDtcs(lines) {
-  const codes = [];
-  const isCan = protocol >= 6 && protocol <= 9;
-  for (const line of lines) {
-    const hex = line.replace(/[^0-9A-Fa-f]/g, '');
-    const at = hex.toUpperCase().indexOf('43');
-    if (at < 0) continue;
-    let body = hex.slice(at + 2);
-    if (isCan) body = body.slice(2);
-    for (let i = 0; i + 4 <= body.length; i += 4) {
-      const w = parseInt(body.slice(i, i + 4), 16);
-      if (!w) continue;
-      const sys = 'PCBU'[w >> 14];
-      codes.push(sys + ((w >> 12) & 3) + (w & 0x0fff).toString(16).toUpperCase().padStart(3, '0'));
+// Hex lines → byte arrays. Drops status text like "SEARCHING..." and the
+// "0:"-style frame numbers a genuine ELM327 prints for multi-frame replies.
+function hexFrames(lines) {
+  return (lines || []).map((l) => l.trim().replace(/^[0-9A-F]:\s*/i, ''))
+    .filter((l) => /^[0-9A-F]{2}( ?[0-9A-F]{2})*$/i.test(l))
+    .map((l) => l.replace(/\s/g, '').match(/../g).map((h) => parseInt(h, 16)));
+}
+
+// Payload of an ISO-TP reply starting at service id `sid`. The Carly adapter
+// shows PCI bytes and padding (e.g. "02 43 00 AA AA ..."), a genuine ELM327
+// hides them; handle both.
+function payload(lines, sid) {
+  const frames = hexFrames(lines);
+  if (!frames.length) return null;
+  if (frames[0][0] === sid) return frames.flat();
+  const out = [];
+  let need = 0;
+  for (const f of frames) {
+    const type = f[0] >> 4;
+    if (type === 0 && f[1] === sid) return f.slice(1, 1 + (f[0] & 0x0f));
+    if (type === 1 && f[2] === sid) { need = ((f[0] & 0x0f) << 8) | f[1]; out.push(...f.slice(2)); }
+    else if (type === 2 && need) out.push(...f.slice(1));
+  }
+  return need ? out.slice(0, need) : null;
+}
+
+const dtcName = (w) => 'PCBU'[w >> 14] + ((w >> 12) & 3)
+  + (w & 0x0fff).toString(16).toUpperCase().padStart(3, '0');
+
+// Mode 03/07 reply → DTC strings like "P0133". CAN replies carry a count byte
+// after the service id; older protocols pad to three codes per line.
+function parseDtcs(lines, sid) {
+  const words = [];
+  if (protocol >= 6 && protocol <= 9) {
+    const p = payload(lines, sid);
+    if (p) for (let i = 2; i + 1 < Math.min(p.length, 2 + p[1] * 2); i += 2) words.push((p[i] << 8) | p[i + 1]);
+  } else {
+    for (const f of hexFrames(lines)) {
+      if (f[0] === sid) for (let i = 1; i + 1 < f.length; i += 2) words.push((f[i] << 8) | f[i + 1]);
     }
   }
-  return [...new Set(codes)];
+  return [...new Set(words.filter(Boolean).map(dtcName))];
 }
 
 async function readDtcs() {
@@ -279,8 +306,8 @@ async function readDtcs() {
   const stored = (await send('03', 15000)) || [];
   const pending = (await send('07', 15000)) || [];
   const box = $('dtcs');
-  const s = parseDtcs(stored);
-  const p = parseDtcs(pending.map((l) => l.replace(/^47/, '43')));
+  const s = parseDtcs(stored, 0x43);
+  const p = parseDtcs(pending, 0x47);
   box.innerHTML = '';
   const add = (title, list) => {
     const div = document.createElement('div');
@@ -294,29 +321,50 @@ async function readDtcs() {
 async function readVin() {
   if (protocol == null) await init();
   const lines = (await send('0902', 15000)) || [];
-  const hex = lines.join('').replace(/[^0-9A-Fa-f]/g, '');
-  const ascii = (hex.match(/.{2}/g) || []).map((h) => parseInt(h, 16))
-    .filter((b) => b >= 0x30 && b <= 0x5a).map((b) => String.fromCharCode(b)).join('');
-  const vin = ascii.slice(-17);
-  log(`VIN (geschätzt): ${vin.length === 17 ? vin : 'nicht erkannt'}`);
+  const p = payload(lines, 0x49);
+  const vin = p ? String.fromCharCode(...p.slice(3).filter((b) => b >= 0x30 && b <= 0x5a)) : '';
+  log(`VIN: ${vin.length === 17 ? vin : 'nicht erkannt'}`);
 }
 
-// BMW F-series diagnostics: UDS over D-CAN with extended addressing.
-// Tester sends on 0x6F1 with the ECU address as first byte; the ECU answers
-// on 0x600 + address. Only read services (0x22, 0x19) are used here.
-async function bmwTest(ecu = '12') {
-  log(`--- BMW-Test: Steuergerät 0x${ecu} (nur lesen) ---`);
-  const setup = ['ATZ', 'ATE0', 'ATL0', 'ATS1', 'ATH1', 'ATSP6', 'ATSH6F1',
-    `ATCEA${ecu}`, `ATCRA6${ecu}`, 'ATFCSH6F1', `ATFCSD${ecu}300000`, 'ATFCSM1', 'ATST FF'];
-  for (const c of setup) {
+// BMW F-series diagnostics: UDS over D-CAN with extended addressing. Requests
+// go out on 0x6F1 with the ECU address as first data byte; answers come back
+// on 0x600 + address with 0xF1 first. This adapter ignores ATCEA, so CAN
+// auto-formatting is switched off and the frames are built by hand. Only
+// TesterPresent (3E) and ReadDTCInformation (19) are sent — nothing writes.
+const BMW_ECUS = [
+  ['12', 'Motor (DME/DDE)'], ['40', 'FEM (Karosserie/Gateway)'], ['60', 'Kombi'],
+  ['29', 'DSC (ABS/ESP)'], ['18', 'Getriebe (EGS)'], ['01', 'Airbag (ACSM)'],
+];
+const frame8 = (...bytes) => bytes.concat(Array(8).fill('00')).slice(0, 8).join('');
+// Reply lines look like "612 F1 03 7E 00 ..." with headers on.
+const bmwReplies = (lines, ecu) => (lines || []).map((l) => l.trim().split(/\s+/))
+  .filter((t) => t[0]?.toUpperCase() === `6${ecu}` && t[1]?.toUpperCase() === 'F1');
+
+async function bmwTest() {
+  log('--- BMW-Test (nur lesen) ---');
+  for (const c of ['ATZ', 'ATE0', 'ATL0', 'ATS1', 'ATH1', 'ATSP6', 'ATCAF0',
+    'ATSH6F1', 'ATCF600', 'ATCM700', 'ATST96']) {
     const r = await send(c, c === 'ATZ' ? 8000 : 4000);
     if (r && r.some((l) => l.includes('?'))) log(`Hinweis: Adapter kennt "${c}" nicht.`);
   }
-  await send('22F190', 10000);  // VIN via UDS
-  await send('19020C', 15000);  // DTCs, status: pending + confirmed
-  for (const c of ['ATCEA', 'ATFCSM0', 'ATH0']) await send(c, 4000);
+  const found = [];
+  for (const [ecu, name] of BMW_ECUS) {
+    const r = await send(frame8(ecu, '02', '3E', '00'), 4000);
+    const ok = bmwReplies(r, ecu).some((t) => t[3]?.toUpperCase() === '7E');
+    log(`Steuergerät 0x${ecu} ${name}: ${ok ? 'antwortet ✓' : 'keine Antwort'}`);
+    if (ok) found.push(ecu);
+  }
+  if (found.includes('12')) {
+    // ReadDTCInformation, reportDTCByStatusMask, mask 0x0C (pending + confirmed).
+    let r = await send(frame8('12', '03', '19', '02', '0C'), 6000);
+    // A first frame (PCI 1x) means more data follows once we send flow control.
+    if (bmwReplies(r, '12').some((t) => t[2]?.startsWith('1'))) {
+      r = await send(frame8('12', '30', '00', '00'), 6000);
+    }
+  }
+  await send('ATZ', 8000);
   protocol = null;
-  log('--- BMW-Test fertig ---');
+  log(`--- BMW-Test fertig: ${found.length} von ${BMW_ECUS.length} Steuergeräten erreichbar ---`);
 }
 
 document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', async () => {
