@@ -70,6 +70,7 @@
       <button data-cmd="0100" disabled>Unterstützte PIDs</button>
       <button data-cmd="vin" disabled>VIN</button>
       <button data-cmd="dtc" disabled>Fehlercodes lesen</button>
+      <button data-cmd="bmw" disabled>BMW-Test (nur lesen)</button>
     </div>
     <div class="row">
       <input type="text" id="raw" placeholder="Eigener Befehl, z. B. 010C" disabled>
@@ -286,6 +287,24 @@ async function readVin() {
   log(`VIN (geschätzt): ${vin.length === 17 ? vin : 'nicht erkannt'}`);
 }
 
+// BMW F-series diagnostics: UDS over D-CAN with extended addressing.
+// Tester sends on 0x6F1 with the ECU address as first byte; the ECU answers
+// on 0x600 + address. Only read services (0x22, 0x19) are used here.
+async function bmwTest(ecu = '12') {
+  log(`--- BMW-Test: Steuergerät 0x${ecu} (nur lesen) ---`);
+  const setup = ['ATZ', 'ATE0', 'ATL0', 'ATS1', 'ATH1', 'ATSP6', 'ATSH6F1',
+    `ATCEA${ecu}`, `ATCRA6${ecu}`, 'ATFCSH6F1', `ATFCSD${ecu}300000`, 'ATFCSM1', 'ATST FF'];
+  for (const c of setup) {
+    const r = await send(c, c === 'ATZ' ? 8000 : 4000);
+    if (r && r.some((l) => l.includes('?'))) log(`Hinweis: Adapter kennt "${c}" nicht.`);
+  }
+  await send('22F190', 10000);  // VIN via UDS
+  await send('19020C', 15000);  // DTCs, status: pending + confirmed
+  for (const c of ['ATCEA', 'ATFCSM0', 'ATH0']) await send(c, 4000);
+  protocol = null;
+  log('--- BMW-Test fertig ---');
+}
+
 document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', async () => {
   const cmd = b.dataset.cmd;
   b.disabled = true;
@@ -293,6 +312,7 @@ document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click
     if (cmd === 'init') await init();
     else if (cmd === 'dtc') await readDtcs();
     else if (cmd === 'vin') await readVin();
+    else if (cmd === 'bmw') await bmwTest();
     else await send(cmd, 10000);
   } finally { b.disabled = false; }
 }));
