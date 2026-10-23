@@ -44,7 +44,7 @@
 </head>
 <body>
 <main>
-  <h1>OBD Adapter-Test</h1>
+  <h1>OBD Adapter-Test <span class="muted">v4</span></h1>
   <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
     Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
 
@@ -93,14 +93,18 @@
 <script>
 // Services that common BLE OBD adapters expose. Web Bluetooth only lets us
 // open services listed up front, so this list is deliberately broad.
+// Full 128-bit strings only: some iOS Web Bluetooth browsers reject numeric
+// or named UUIDs.
+const VERSION = 'v4';
+const short = (n) => `0000${n}-0000-1000-8000-00805f9b34fb`;
 const KNOWN_SERVICES = [
-  0xfff0, 0xffe0, 0x18f0, 0xffb0, 0xfee7, 0xae30, 0xbeef,
+  ...['fff0', 'ffe0', '18f0', 'ffb0', 'fee7', 'ae30', 'beef', '180a', '180f'].map(short),
   'e7810a71-73ae-499d-8c15-faa9aef0c3f2',
-  '0000ffe0-0000-1000-8000-00805f9b34fb',
   '49535343-fe7d-4ae5-8fa9-9fafd205e455',
   '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
-  'device_information', 'battery_service', 'generic_access',
 ];
+const errText = (e) => e instanceof Error ? `${e.name}: ${e.message}`
+  : typeof e === 'string' ? e : JSON.stringify(e) ?? String(e);
 
 const $ = (id) => document.getElementById(id);
 const logEl = $('log');
@@ -183,14 +187,14 @@ async function connect() {
     setStatus(`Verbunden: ${device.name || 'Adapter'}`, 'ok');
     setConnected(true);
   } catch (e) {
-    log(`Fehler bei ${stage}: ${e.name}: ${e.message}`);
-    if (stage === 'Gerätewahl' && e.name === 'NotFoundError') {
+    log(`Fehler bei ${stage}: ${errText(e)}`);
+    if (stage === 'Gerätewahl' && e?.name === 'NotFoundError') {
       setStatus('Abgebrochen', 'err');
     } else if (stage === 'Service-Suche') {
       setStatus('Verbunden, aber keine bekannten Dienste. UUIDs mit nRF Connect ermitteln und oben eintragen.', 'err');
       log('Der Adapter nutzt Service-UUIDs, die nicht in der Liste stehen.');
     } else {
-      setStatus(`Fehler bei ${stage}: ${e.message}`, 'err');
+      setStatus(`Fehler bei ${stage}: ${errText(e)}`, 'err');
     }
   }
 }
@@ -340,6 +344,7 @@ $('copy').addEventListener('click', async () => {
   catch { log('Kopieren nicht möglich – bitte Text markieren.'); }
 });
 
+log(`Seitenversion ${VERSION}`);
 log(navigator.bluetooth ? 'Web Bluetooth verfügbar.' : 'Web Bluetooth NICHT verfügbar (Safari/Firefox). Bluefy oder Chrome nutzen.');
 </script>
 </body>
