@@ -44,7 +44,7 @@
 </head>
 <body>
 <main>
-  <h1>OBD Adapter-Test <span class="muted">v6</span></h1>
+  <h1>OBD Adapter-Test <span class="muted">v7</span></h1>
   <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
     Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
 
@@ -100,7 +100,7 @@
 // open services listed up front, so this list is deliberately broad.
 // Full 128-bit strings only: some iOS Web Bluetooth browsers reject numeric
 // or named UUIDs.
-const VERSION = 'v6';
+const VERSION = 'v7';
 const OAD_SERVICE_PREFIX = 'f000ffc0';
 const short = (n) => `0000${n}-0000-1000-8000-00805f9b34fb`;
 const KNOWN_SERVICES = [
@@ -354,25 +354,55 @@ function bmwFrames(lines) {
 }
 
 // ISO-TP with one address byte: single frames carry up to 6 bytes, first
-// frames 5, consecutive frames 6.
+// frames 5, consecutive frames 6. Returns { data, need, complete } or null.
 function bmwAssemble(frames) {
   let out = [], need = 0;
   for (const { data } of frames) {
     const type = data[0] >> 4;
-    if (type === 0) return data.slice(1, 1 + (data[0] & 0x0f));
+    if (type === 0) {
+      const n = data[0] & 0x0f;
+      return { data: data.slice(1, 1 + n), need: n, complete: true };
+    }
     if (type === 1) { need = ((data[0] & 0x0f) << 8) | data[1]; out = data.slice(2); }
     else if (type === 2 && need) out.push(...data.slice(1));
   }
-  return need ? out.slice(0, need) : null;
+  return need ? { data: out.slice(0, need), need, complete: out.length >= need } : null;
 }
 
+// "7F <sid> 78": the ECU needs more time; the real answer follows.
+const isPending = (f) => f.data[0] === 0x03 && f.data[1] === 0x7F && f.data[3] === 0x78;
+let countHints = true;  // adapter accepts a trailing "expected frames" digit
+
+// The ECU drops a multi-frame answer if flow control is not back within about
+// a second. A trailing digit makes the adapter return after that many frames
+// instead of waiting out its own timeout, so the flow control is in time.
 async function bmwRequest(ecu, ...service) {
-  const lines = (await send(frame8(ecu, hex2(service.length), ...service), 6000)) || [];
-  let frames = bmwFrames(lines).filter((f) => f.ecu === ecu);
-  if (frames.some((f) => f.data[0] >> 4 === 1)) {
+  const req = frame8(ecu, hex2(service.length), ...service);
+  const ask = async (cmd, expect) => {
+    let lines = (await send(countHints ? `${cmd} ${expect}` : cmd, 6000)) || [];
+    if (countHints && lines.some((l) => l.includes('?'))) {
+      log('Hinweis: Adapter kennt die Antwortanzahl nicht, nutze kurzes Timeout.');
+      countHints = false;
+      await send('ATST20', 4000);
+      lines = (await send(cmd, 6000)) || [];
+    }
+    return bmwFrames(lines).filter((f) => f.ecu === ecu);
+  };
+
+  let frames = [], pending = false;
+  for (let attempt = 0; attempt < 3 && !frames.length; attempt++) {
+    // After a "please wait" the next try expects two frames: wait + answer.
+    const got = await ask(req, pending ? 2 : 1);
+    pending = got.some(isPending);
+    frames = got.filter((f) => !isPending(f));
+    if (!frames.length && !pending && attempt) break;
+  }
+  const first = frames.find((f) => f.data[0] >> 4 === 1);
+  if (first) {
+    const len = ((first.data[0] & 0x0f) << 8) | first.data[1];
+    const cfs = Math.ceil((len - 5) / 6);
     // Flow control: send everything, 10 ms between frames for the BLE link.
-    const more = (await send(frame8(ecu, '30', '00', '0A'), 8000)) || [];
-    frames = frames.concat(bmwFrames(more).filter((f) => f.ecu === ecu));
+    frames = frames.concat(await ask(frame8(ecu, '30', '00', '0A'), cfs <= 15 ? cfs.toString(16).toUpperCase() : ''));
   }
   return bmwAssemble(frames);
 }
@@ -404,8 +434,8 @@ async function bmwDiscover() {
   // Ask the known ones directly too, twice, in case the broadcast missed some.
   for (const ecu of Object.keys(ECU_NAMES)) {
     for (let i = 0; i < 2 && !found.has(ecu); i++) {
-      const p = await bmwRequest(ecu, '3E', '00');
-      if (p && p[0] === 0x7E) found.add(ecu);
+      const r = await bmwRequest(ecu, '3E', '00');
+      if (r?.data[0] === 0x7E) found.add(ecu);
     }
   }
   return [...found].sort();
@@ -420,11 +450,15 @@ async function bmwScan() {
   box.innerHTML = '';
   for (const ecu of ecus) {
     const name = ECU_NAMES[ecu] || `Steuergerät 0x${ecu}`;
-    const p = await bmwRequest(ecu, '19', '02', '0C');
-    const dtcs = bmwDtcs(p);
+    const r = await bmwRequest(ecu, '19', '02', '0C');
+    const dtcs = r?.complete ? bmwDtcs(r.data) : null;
     let html;
-    if (dtcs == null) {
-      html = `<span class="muted">Fehlerspeicher nicht lesbar (${p ? p.map(hex2).join(' ') : 'keine Antwort'})</span>`;
+    if (r && !r.complete && r.data[0] === 0x59) {
+      // The first frame still tells us how many entries there are.
+      const n = Math.floor((r.need - 3) / 4);
+      html = `<span style="color:var(--err)">${n} Fehler – Codes nicht vollständig empfangen</span>`;
+    } else if (dtcs == null) {
+      html = `<span class="muted">Fehlerspeicher nicht lesbar (${r ? r.data.map(hex2).join(' ') : 'keine Antwort'})</span>`;
     } else if (!dtcs.length) {
       html = '<span style="color:var(--ok)">keine Fehler</span>';
     } else {
