@@ -2,110 +2,724 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>OBD Adapter-Test</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b0e14">
+<title>BMW Diagnose</title>
 <style>
   :root {
-    --bg: #f6f7f9; --card: #ffffff; --text: #16181d; --muted: #646b78;
-    --line: #dde1e7; --accent: #1f6feb; --ok: #1a7f37; --err: #cf222e; --code: #f0f2f5;
+    --bg: #f2f4f8; --surface: #ffffff; --surface-2: #f0f2f6; --text: #121722; --muted: #5f6878;
+    --line: #e1e5ec; --accent: #2563eb; --accent-soft: #e7eeff; --on-accent: #ffffff;
+    --ok: #15803d; --ok-soft: #e4f5e9; --warn: #b45309; --warn-soft: #fdf0dc;
+    --err: #c81e1e; --err-soft: #fde7e7; --code: #eef1f6;
+    --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 6px 18px rgba(16, 24, 40, .06);
+    --radius: 16px; --nav-h: 62px;
   }
   @media (prefers-color-scheme: dark) {
     :root {
-      --bg: #0f1115; --card: #171a21; --text: #e6e8ec; --muted: #9aa1ad;
-      --line: #2a2f39; --accent: #4c8dff; --ok: #3fb950; --err: #f85149; --code: #11141a;
+      --bg: #0b0e14; --surface: #141922; --surface-2: #1b212c; --text: #e8ebf1; --muted: #8f98a8;
+      --line: #252c38; --accent: #5b8cff; --accent-soft: #19233d; --on-accent: #0b0e14;
+      --ok: #3ccb6a; --ok-soft: #10261a; --warn: #f0a43a; --warn-soft: #2c210f;
+      --err: #ff6b6b; --err-soft: #321617; --code: #0f131a;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .35), 0 8px 24px rgba(0, 0, 0, .25);
     }
   }
   * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
   body { margin: 0; background: var(--bg); color: var(--text);
-    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-  main { max-width: 760px; margin: 0 auto; padding: 16px; }
-  h1 { font-size: 20px; margin: 4px 0 2px; }
-  h2 { font-size: 15px; margin: 0 0 10px; }
-  p.sub { color: var(--muted); margin: 0 0 16px; }
-  section { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-    padding: 14px; margin-bottom: 14px; }
-  button { font: inherit; border: 1px solid var(--line); background: var(--card); color: var(--text);
-    border-radius: 9px; padding: 9px 12px; cursor: pointer; }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button:disabled { opacity: .45; cursor: default; }
-  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-  input[type=text] { font: inherit; flex: 1; min-width: 0; padding: 9px 10px; border-radius: 9px;
-    border: 1px solid var(--line); background: var(--bg); color: var(--text); }
-  #status { font-weight: 600; }
-  #status.ok { color: var(--ok); } #status.err { color: var(--err); }
-  pre { background: var(--code); border-radius: 9px; padding: 10px; margin: 0; overflow-x: auto;
-    font: 12.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap;
-    word-break: break-word; max-height: 360px; overflow-y: auto; }
+    font: 15px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    padding-bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 16px); }
+  [hidden] { display: none !important; }
+  h2 { font-size: 16px; margin: 0; letter-spacing: -.01em; }
+  h3 { font-size: 14px; margin: 14px 0 6px; }
+  p { margin: 6px 0; }
+  a { color: var(--accent); }
   .muted { color: var(--muted); font-size: 13px; }
-  .dtc { display: inline-block; font-family: ui-monospace, Consolas, monospace; font-weight: 600;
-    padding: 3px 8px; border-radius: 6px; background: var(--code); margin: 2px 4px 2px 0; }
-  label.small { font-size: 13px; color: var(--muted); display: block; margin-bottom: 4px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
+
+  /* Header */
+  .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+    background: var(--bg);
+    background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: saturate(1.4) blur(14px);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--line); }
+  .brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .logo { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; flex: none;
+    background: linear-gradient(135deg, #1c69d4, #0b2e6b); color: #fff; }
+  .brand b { display: block; font-size: 16px; letter-spacing: -.01em; }
+  .brand small { color: var(--muted); font-size: 12px; }
+  .pills { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
+  .pill { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--line); font-size: 12.5px; font-weight: 600;
+    max-width: 52vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pill .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+  .pill.ok .dot { background: var(--ok); box-shadow: 0 0 0 3px var(--ok-soft); }
+  .pill.err .dot { background: var(--err); }
+  .pill.busy .dot { background: var(--warn); animation: pulse 1s infinite; }
+  .pill.demo { color: var(--warn); }
+  @keyframes pulse { 50% { opacity: .3; } }
+
+  .busy { position: sticky; top: calc(57px + env(safe-area-inset-top)); z-index: 19; display: flex; align-items: center;
+    gap: 10px; padding: 7px 16px; background: var(--accent-soft); color: var(--accent); font-size: 13px; font-weight: 600; }
+  .spinner { width: 14px; height: 14px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent;
+    animation: spin .8s linear infinite; flex: none; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  main { max-width: 860px; margin: 0 auto; padding: 16px; }
+  .tab > * + * { margin-top: 14px; }
+  #obdResult:empty, #bmwResult:empty { display: none; }
+  .tab-title { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin: 4px 2px 0; }
+  .tab-title h1 { font-size: 24px; margin: 0; letter-spacing: -.02em; }
+
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 16px; box-shadow: var(--shadow); }
+  .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .card-head .ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); flex: none; }
+  .card-head > div:first-child { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+  /* Buttons and inputs */
+  .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .btn { font: inherit; font-weight: 600; border: 1px solid var(--line); background: var(--surface-2); color: var(--text);
+    border-radius: 12px; padding: 10px 14px; cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+    min-height: 42px; transition: transform .08s, background .15s; }
+  .btn:active:not(:disabled) { transform: scale(.97); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .btn.danger { background: var(--err-soft); border-color: transparent; color: var(--err); }
+  .btn.danger.armed { background: var(--err); color: #fff; }
+  .btn.ghost { background: transparent; }
+  .btn.small { min-height: 34px; padding: 6px 10px; font-size: 13px; border-radius: 10px; }
+  .btn:disabled { opacity: .45; cursor: default; }
+  input[type=text], input[type=search], select, textarea { font: inherit; width: 100%; min-width: 0; padding: 10px 12px;
+    border-radius: 12px; border: 1px solid var(--line); background: var(--surface-2); color: var(--text); }
+  textarea { min-height: 64px; resize: vertical; }
+  label.small { font-size: 13px; color: var(--muted); display: block; margin: 8px 0 4px; }
+  .check { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+  .check input { width: 20px; height: 20px; margin: 1px 0 0; flex: none; }
+
+  /* Big action tiles */
+  .actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; }
+  .action { text-align: left; font: inherit; color: var(--text); background: var(--surface); border: 1px solid var(--line);
+    border-radius: var(--radius); padding: 14px; cursor: pointer; box-shadow: var(--shadow); display: flex; flex-direction: column;
+    gap: 6px; min-height: 108px; transition: transform .08s, border-color .15s; }
+  .action:active:not(:disabled) { transform: scale(.98); }
+  .action:hover:not(:disabled) { border-color: var(--accent); }
+  .action:disabled { opacity: .45; cursor: default; }
+  .action .ico { width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); }
+  .action b { font-size: 15px; }
+  .action span { color: var(--muted); font-size: 12.5px; line-height: 1.35; }
+  .action.danger .ico { background: var(--err-soft); color: var(--err); }
+  .action.danger.armed { border-color: var(--err); background: var(--err-soft); }
+
+  /* Summary stats */
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+  .stat { background: var(--surface-2); border-radius: 12px; padding: 10px 12px; }
+  .stat small { display: block; color: var(--muted); font-size: 12px; }
+  .stat b { font-size: 20px; letter-spacing: -.02em; }
+  .stat.ok b { color: var(--ok); } .stat.warn b { color: var(--warn); } .stat.err b { color: var(--err); }
+
+  .banner { border-radius: 12px; padding: 10px 12px; font-size: 13.5px; display: flex; gap: 10px; align-items: flex-start; }
+  .banner.info { background: var(--accent-soft); }
+  .banner.warn { background: var(--warn-soft); }
+  .banner.err { background: var(--err-soft); }
+  .banner.ok { background: var(--ok-soft); }
+
+  /* Fault code cards */
+  .dtc-list { display: flex; flex-direction: column; gap: 8px; }
+  details.dtc { border: 1px solid var(--line); border-radius: 12px; background: var(--surface); overflow: hidden; }
+  details.dtc > summary { list-style: none; cursor: pointer; padding: 10px 12px; display: grid;
+    grid-template-columns: auto 1fr auto; gap: 4px 10px; align-items: center; }
+  details.dtc > summary::-webkit-details-marker { display: none; }
+  details.dtc[open] > summary { border-bottom: 1px solid var(--line); background: var(--surface-2); }
+  .code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-weight: 700; font-size: 13.5px;
+    padding: 3px 8px; border-radius: 7px; background: var(--code); white-space: nowrap; }
+  .dtc-title { font-weight: 600; font-size: 14px; min-width: 0; }
+  .tags { grid-column: 2 / 4; display: flex; gap: 5px; flex-wrap: wrap; }
+  .tag { font-size: 11.5px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--surface-2);
+    color: var(--muted); border: 1px solid var(--line); }
+  .tag.active { background: var(--err-soft); color: var(--err); border-color: transparent; }
+  .tag.new { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .sev { font-size: 11.5px; font-weight: 700; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .sev.hoch { background: var(--err-soft); color: var(--err); }
+  .sev.mittel { background: var(--warn-soft); color: var(--warn); }
+  .sev.gering { background: var(--ok-soft); color: var(--ok); }
+  .sev.unbekannt { background: var(--surface-2); color: var(--muted); }
+  .dtc-body { padding: 10px 14px 14px; font-size: 14px; }
+  .dtc-body ol { margin: 6px 0; padding-left: 22px; }
+  .dtc-body li { margin: 3px 0; }
+  .dtc-body .hint { background: var(--surface-2); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+  .note-box { margin-top: 10px; }
+
+  .ecu { border: 1px solid var(--line); border-radius: 14px; padding: 12px; }
+  .ecu-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 6px; }
+  .count { font-size: 12px; font-weight: 700; padding: 3px 9px; border-radius: 999px; }
+  .count.zero { background: var(--ok-soft); color: var(--ok); }
+  .count.some { background: var(--warn-soft); color: var(--warn); }
+  .count.na { background: var(--surface-2); color: var(--muted); }
+  .ecu-grid { display: grid; gap: 10px; }
+
+  /* Live data */
+  .gauges { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .gauge { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+    padding: 10px 10px 12px; text-align: center; box-shadow: var(--shadow); }
+  .gauge svg { width: 100%; max-width: 170px; display: block; margin: 0 auto; }
+  .gauge .track { fill: none; stroke: var(--surface-2); stroke-width: 10; stroke-linecap: round; }
+  .gauge .val { fill: none; stroke: var(--accent); stroke-width: 10; stroke-linecap: round;
+    stroke-dasharray: 100; stroke-dashoffset: 100; transition: stroke-dashoffset .35s ease, stroke .3s; }
+  .gauge.warn .val { stroke: var(--warn); } .gauge.err .val { stroke: var(--err); }
+  .gauge .readout { position: absolute; left: 0; right: 0; top: 40%; }
+  .gauge .readout b { font-size: 28px; letter-spacing: -.03em; font-variant-numeric: tabular-nums; }
+  .gauge .readout small { display: block; color: var(--muted); font-size: 12px; }
+  .gauge .label { font-size: 13px; font-weight: 600; margin-top: -8px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+  .tile { background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px; box-shadow: var(--shadow); }
+  .tile small { color: var(--muted); font-size: 12px; display: block; }
+  .tile b { font-size: 22px; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+  .tile i { font-style: normal; color: var(--muted); font-size: 13px; margin-left: 3px; }
+  .meter { height: 5px; border-radius: 3px; background: var(--surface-2); margin-top: 8px; overflow: hidden; }
+  .meter span { display: block; height: 100%; width: 0; background: var(--accent); border-radius: 3px; transition: width .35s; }
+
+  /* Readiness */
+  .ready-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 6px; }
+  .ready { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
+  .ready .st { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 800; flex: none; }
+  .ready .st.ok { background: var(--ok-soft); color: var(--ok); }
+  .ready .st.open { background: var(--warn-soft); color: var(--warn); }
+
+  ol.steps { counter-reset: s; list-style: none; padding: 0; margin: 8px 0; }
+  ol.steps li { counter-increment: s; position: relative; padding: 8px 0 8px 40px; border-bottom: 1px dashed var(--line); }
+  ol.steps li:last-child { border-bottom: 0; }
+  ol.steps li::before { content: counter(s); position: absolute; left: 0; top: 7px; width: 28px; height: 28px; border-radius: 50%;
+    background: var(--accent-soft); color: var(--accent); font-weight: 700; display: grid; place-items: center; font-size: 13px; }
+
+  table.kv { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+  table.kv td { padding: 6px 4px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.kv td:first-child { color: var(--muted); width: 42%; }
+
+  pre { background: var(--code); border-radius: 12px; padding: 10px; margin: 0; overflow-x: auto;
+    font: 12.5px/1.45 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap;
+    word-break: break-word; max-height: 60vh; overflow-y: auto; }
+
+  .history-item { display: flex; gap: 10px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; flex-wrap: wrap; }
+  .history-item:last-child { border-bottom: 0; }
+
+  /* Bottom navigation */
+  nav.tabs { position: fixed; left: 0; right: 0; bottom: 0; z-index: 30; display: grid; grid-template-columns: repeat(6, 1fr);
+    background: var(--surface);
+    background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: saturate(1.4) blur(16px);
+    -webkit-backdrop-filter: saturate(1.4) blur(16px); border-top: 1px solid var(--line);
+    padding-bottom: env(safe-area-inset-bottom); }
+  nav.tabs button { font: inherit; background: none; border: 0; color: var(--muted); height: var(--nav-h); cursor: pointer;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; font-weight: 600; }
+  nav.tabs button[aria-current="page"] { color: var(--accent); }
+  nav.tabs svg { width: 22px; height: 22px; }
+  @media (min-width: 900px) {
+    nav.tabs { left: 50%; right: auto; transform: translateX(-50%); bottom: 14px; width: 620px; border: 1px solid var(--line);
+      border-radius: 18px; box-shadow: var(--shadow); padding-bottom: 0; overflow: hidden; }
+  }
+
+  .toast { position: fixed; left: 50%; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom) + 14px); transform: translate(-50%, 20px);
+    background: var(--text); color: var(--bg); padding: 10px 14px; border-radius: 12px; font-size: 13.5px; font-weight: 600;
+    opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 40; max-width: calc(100vw - 32px); }
+  .toast.show { opacity: 1; transform: translate(-50%, 0); }
+  details.adv { margin-top: 10px; }
+  details.adv summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  .empty { color: var(--muted); font-size: 13.5px; padding: 6px 0; }
 </style>
 </head>
 <body>
+
+<header class="top">
+  <div class="brand">
+    <div class="logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 17h14M6 17l1.5-5.5A2 2 0 0 1 9.4 10h5.2a2 2 0 0 1 1.9 1.5L18 17"/><path d="M4 17v2M20 17v2M3 13h2M19 13h2"/><circle cx="8" cy="17" r="1"/><circle cx="16" cy="17" r="1"/></svg></div>
+    <div><b>BMW Diagnose</b><small id="ver"></small></div>
+  </div>
+  <div class="pills">
+    <span class="pill" id="battPill" hidden></span>
+    <span class="pill" id="connPill"><span class="dot"></span><span id="status">Nicht verbunden</span></span>
+  </div>
+</header>
+<div class="busy" id="busy" hidden><span class="spinner"></span><span id="busyLabel"></span></div>
+
 <main>
-  <h1>OBD Adapter-Test <span class="muted">v10</span></h1>
-  <p class="sub">Prüft, ob dein Bluetooth-Adapter Standard-OBD-Befehle (ELM327) versteht.
-    Auf dem iPhone im Browser <b>Bluefy</b> öffnen, Zündung an.</p>
-
-  <section>
-    <h2>1 · Verbinden</h2>
-    <label class="small" for="extra">Zusätzliche Service-UUIDs (optional, durch Komma getrennt)</label>
-    <div class="row" style="margin-bottom:10px">
-      <input type="text" id="extra" placeholder="z. B. 0000abcd-0000-1000-8000-00805f9b34fb">
+  <!-- DIAGNOSE -->
+  <section class="tab" id="tab-diag">
+    <div class="card" id="connCard">
+      <div class="card-head">
+        <div>
+          <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m7 7 10 10-5 5V2l5 5L7 17"/></svg></div>
+          <div><h2>Adapter</h2><p class="muted" id="connHint" style="margin:2px 0 0">Auf dem iPhone in <b>Bluefy</b> öffnen, Zündung an, dann verbinden.</p></div>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn primary" id="connect">Adapter suchen</button>
+        <button class="btn" id="demo">Demo ohne Auto</button>
+        <button class="btn" id="disconnect" hidden>Trennen</button>
+      </div>
+      <details class="adv">
+        <summary>Erweitert: zusätzliche Service-UUIDs</summary>
+        <label class="small" for="extra">Durch Komma getrennt (nur nötig, wenn der Adapter nicht gefunden wird)</label>
+        <input type="text" id="extra" placeholder="z. B. 0000abcd-0000-1000-8000-00805f9b34fb">
+      </details>
     </div>
-    <div class="row">
-      <button class="primary" id="connect">Adapter suchen</button>
-      <button id="disconnect" disabled>Trennen</button>
-      <span id="status">Nicht verbunden</span>
+
+    <div class="card" id="summaryCard">
+      <div class="card-head"><div><h2>Fahrzeugzustand</h2></div><span class="muted" id="sumTime">Noch kein Test</span></div>
+      <div class="stats">
+        <div class="stat" id="stFaults"><small>Fehler gesamt</small><b>–</b></div>
+        <div class="stat" id="stMil"><small>Motorkontrollleuchte</small><b>–</b></div>
+        <div class="stat" id="stBatt"><small>Batterie</small><b>–</b></div>
+        <div class="stat" id="stReady"><small>AU-Bereitschaft</small><b>–</b></div>
+      </div>
+      <div id="sumHints"></div>
+    </div>
+
+    <div class="actions">
+      <button class="action" id="quick" data-needs-link disabled>
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+        <b>Schnelltest</b><span>Motor-Fehler (OBD), Warnleuchte, AU-Bereitschaft und Batterie</span>
+      </button>
+      <button class="action" id="bmwScan" data-needs-link disabled>
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/></svg></div>
+        <b>BMW Komplett-Scan</b><span>Alle Steuergeräte finden und deren Fehlerspeicher lesen</span>
+      </button>
+      <button class="action danger" id="clearBtn" data-needs-link disabled>
+        <div class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg></div>
+        <b id="clearLabel">Fehler löschen</b><span id="clearSub">Alle Steuergeräte · zum Bestätigen zweimal tippen</span>
+      </button>
+    </div>
+
+    <div id="obdResult"></div>
+    <div id="bmwResult"></div>
+
+    <div class="card">
+      <div class="card-head"><div><h2>Verlauf</h2></div><button class="btn small ghost" id="histClear">Leeren</button></div>
+      <div id="history"></div>
     </div>
   </section>
 
-  <section>
-    <h2>2 · Befehle</h2>
-    <div class="row" style="margin-bottom:10px">
-      <button data-cmd="init" disabled>Initialisieren</button>
-      <button data-cmd="ATI" disabled>ATI (Chip)</button>
-      <button data-cmd="ATRV" disabled>Batteriespannung</button>
-      <button data-cmd="0100" disabled>Unterstützte PIDs</button>
-      <button data-cmd="vin" disabled>VIN</button>
-      <button data-cmd="dtc" disabled>Fehlercodes lesen</button>
-      <button data-cmd="bmw" disabled>BMW: alle Steuergeräte auslesen</button>
+  <!-- LIVE -->
+  <section class="tab" id="tab-live" hidden>
+    <div class="tab-title"><h1>Live-Daten</h1><span class="muted" id="liveRate"></span></div>
+    <div class="card">
+      <div class="row">
+        <button class="btn primary" id="liveToggle" data-needs-link disabled>Live-Daten starten</button>
+        <span class="muted">Liest nur. Läuft, bis du stoppst oder eine andere Funktion startest.</span>
+      </div>
     </div>
-    <div class="row">
-      <input type="text" id="raw" placeholder="Eigener Befehl, z. B. 010C" disabled>
-      <button id="send" disabled>Senden</button>
-    </div>
-    <div id="dtcs" style="margin-top:10px"></div>
+    <div class="gauges" id="gauges"></div>
+    <div class="tiles" id="tiles"></div>
+    <p class="muted" id="liveEmpty">Starte die Live-Daten bei laufendem Motor. Es werden nur Werte angezeigt, die dein Motorsteuergerät meldet.</p>
   </section>
 
-  <section>
-    <h2>BMW-Fehlerspeicher</h2>
-    <div id="bmw"><span class="muted">Noch nicht ausgelesen.</span></div>
-    <div class="row" style="margin-top:12px">
-      <button data-cmd="clear" disabled>Fehlerspeicher löschen</button>
+  <!-- SERVICE -->
+  <section class="tab" id="tab-service" hidden>
+    <div class="tab-title"><h1>Service</h1></div>
+
+    <div class="card">
+      <div class="card-head"><div>
+        <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg></div>
+        <h2>Service-Anzeige (CBS) zurücksetzen</h2></div></div>
+      <p class="muted">Für F-Modelle (ca. 2011–2019, z. B. 1er F20, 3er F30, 4er F32, 5er F10) direkt am Kombiinstrument – ohne Adapter.</p>
+      <ol class="steps">
+        <li><b>Zündung an, Motor aus:</b> Start-Stopp-Knopf drücken, <i>ohne</i> auf die Bremse zu treten.</li>
+        <li>Den <b>Rückstellknopf des Tageskilometerzählers</b> (links unten im Kombi) ca. <b>10 Sekunden</b> gedrückt halten, bis der erste Service-Punkt erscheint.</li>
+        <li><b>Kurz drücken</b>, um durch die Punkte zu blättern (Motoröl, Bremsen vorn/hinten, Bremsflüssigkeit, Fahrzeug-Check …).</li>
+        <li>Beim gewünschten Punkt den Knopf <b>ca. 3 Sekunden halten</b>, bis die Rückfrage zum Zurücksetzen erscheint.</li>
+        <li>Loslassen und <b>erneut ca. 3 Sekunden halten</b>, bis die Anzeige bestätigt. Zündung aus und wieder an, um es zu prüfen.</li>
+      </ol>
+      <div class="banner info"><div><b>Gut zu wissen:</b> Datum und Uhrzeit im Auto müssen stimmen – CBS rechnet mit dem Datum.
+        Manche Punkte lassen sich erst zurücksetzen, wenn ein Teil der Laufzeit verbraucht ist. Nach einem Bremsbelagwechsel muss
+        ein ausgelöster Verschleißsensor mit erneuert werden, sonst lässt sich „Bremsen“ nicht zurücksetzen. Bei G-Modellen (ab 2019) läuft es anders.</div></div>
     </div>
-    <p class="muted" style="margin:8px 0 0">Löscht die Fehlerspeicher aller Steuergeräte und liest danach neu aus.
-      Fehler, die gerade aktiv sind, kommen sofort wieder. Zum Bestätigen zweimal tippen.</p>
+
+    <div class="card">
+      <div class="card-head"><div>
+        <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="18" height="12" rx="2"/><path d="M22 11v4M6 7V5M16 7V5M7 13h4M9 11v4M13 13h3"/></svg></div>
+        <h2>Batterie-Check</h2></div></div>
+      <div class="row" style="margin-bottom:8px">
+        <label class="check"><input type="radio" name="battMode" value="rest" checked> Motor aus (Ruhespannung)</label>
+        <label class="check"><input type="radio" name="battMode" value="run"> Motor läuft (Ladespannung)</label>
+      </div>
+      <button class="btn primary" id="battBtn" data-needs-link disabled>Spannung messen</button>
+      <div id="battResult" style="margin-top:10px"></div>
+      <p class="muted">Ruhespannung ist erst aussagekräftig, wenn das Auto mindestens 2 Stunden stand. Gemessen wird am OBD-Stecker – Abweichung zur Batterie ca. 0,1–0,3 V.</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div>
+        <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+        <h2>AU-/TÜV-Bereitschaft</h2></div></div>
+      <p class="muted">Zeigt, ob alle Abgas-Selbsttests des Motors abgeschlossen sind. Nach dem Löschen von Fehlern oder Abklemmen der Batterie sind sie offen, bis du einige Fahrten gemacht hast.</p>
+      <button class="btn primary" id="readyBtn" data-needs-link disabled>Bereitschaft prüfen</button>
+      <div id="readyResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div>
+        <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 8h8M8 12h8M8 16h5"/></svg></div>
+        <h2>Fahrzeugdaten</h2></div></div>
+      <button class="btn primary" id="vehBtn" data-needs-link disabled>Fahrgestellnummer &amp; Motor-Software lesen</button>
+      <div id="vehResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div>
+        <div class="ico"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v4M12 16h.01"/></svg></div>
+        <h2>Was über OBD (noch) nicht eingebaut ist</h2></div></div>
+      <p><b>Service-Rücksetzung per Adapter, Batterie registrieren, Codierungen</b> (z. B. Start-Stopp merken, Spiegel anklappen).
+        Dafür braucht es BMW-eigene Schreibbefehle, die nicht offen dokumentiert sind. Falsche Befehle können Steuergeräte
+        verstellen. Deshalb schickt die App keine ungeprüften Schreibbefehle. Wer die genauen Befehle kennt (z. B. aus ISTA/E-Sys-Protokollen),
+        kann sie im Tab <b>Experte</b> über die UDS-Konsole senden.</p>
+    </div>
   </section>
 
-  <section>
-    <h2>3 · Protokoll</h2>
-    <pre id="log"></pre>
-    <div class="row" style="margin-top:10px">
-      <button id="copy">Protokoll kopieren</button>
-      <button id="clear">Leeren</button>
-      <span class="muted">Schick mir das Protokoll, dann weiß ich, wie der Adapter antwortet.</span>
+  <!-- KATALOG -->
+  <section class="tab" id="tab-cat" hidden>
+    <div class="tab-title"><h1>Fehlercode-Katalog</h1><span class="muted" id="catCount"></span></div>
+    <div class="card">
+      <label class="small" for="catSearch" style="margin-top:0">Code (z. B. P0171) oder Stichwort (z. B. Lambda, Turbo, Kat)</label>
+      <input type="search" id="catSearch" placeholder="Code oder Stichwort" autocomplete="off" autocapitalize="characters">
+      <p class="muted">P-Codes sind genormt (SAE) und herstellerübergreifend gleich. BMW-Codes aus dem Komplett-Scan (6 Stellen, z. B. 480A13) sind herstellerspezifisch –
+        dafür kannst du eigene Notizen speichern; sie erscheinen dann beim nächsten Scan.</p>
+    </div>
+    <div class="dtc-list" id="catResults"></div>
+  </section>
+
+  <!-- EXPERTE -->
+  <section class="tab" id="tab-expert" hidden>
+    <div class="tab-title"><h1>Experte</h1></div>
+
+    <div class="card">
+      <div class="card-head"><div><h2>Steuergeräte-Identifikation</h2></div></div>
+      <p class="muted">Liest Seriennummer, Teilenummer, Software-Version usw. aus jedem gefundenen Steuergerät (nur lesen, UDS 22).</p>
+      <button class="btn primary" id="identBtn" data-needs-link disabled>Steuergeräte identifizieren</button>
+      <div id="identResult" style="margin-top:10px"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h2>UDS-Konsole (BMW D-CAN)</h2></div></div>
+      <div class="row" style="align-items:flex-end">
+        <div style="flex:1 1 180px"><label class="small" for="udsEcu">Steuergerät</label><select id="udsEcu"></select></div>
+        <div style="flex:2 1 220px"><label class="small" for="udsReq">Anfrage (hex, max. 6 Bytes)</label><input type="text" id="udsReq" class="mono" placeholder="22 F1 90" autocomplete="off" autocapitalize="characters"></div>
+        <button class="btn primary" id="udsSend" data-needs-link disabled>Senden</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small" data-uds="22 F1 90">22 F190 · VIN</button>
+        <button class="btn small" data-uds="22 F1 8C">22 F18C · Seriennr.</button>
+        <button class="btn small" data-uds="19 02 0C">19 02 0C · Fehler</button>
+        <button class="btn small" data-uds="3E 00">3E 00 · Ping</button>
+      </div>
+      <label class="check" style="margin-top:12px"><input type="checkbox" id="udsUnlock">
+        <span><b>Schreibende Befehle erlauben</b> (z. B. 2E, 31, 14, 10, 11, 27). Nur, wenn du genau weißt, was der Befehl bewirkt.
+          Flash-Befehle (34–38, 3D) sind immer gesperrt. Wird beim Neuladen zurückgesetzt.</span></label>
+      <pre id="udsOut" style="margin-top:10px">Bereit.</pre>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><div><h2>ELM327-Konsole</h2></div></div>
+      <div class="row">
+        <input type="text" id="raw" class="mono" placeholder="z. B. ATRV oder 010C" style="flex:1" autocomplete="off" autocapitalize="characters">
+        <button class="btn" id="send" data-needs-link disabled>Senden</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button class="btn small" data-raw="ATI">ATI · Chip</button>
+        <button class="btn small" data-raw="ATRV">ATRV · Spannung</button>
+        <button class="btn small" data-raw="ATDPN">ATDPN · Protokoll</button>
+        <button class="btn small" data-raw="0100">0100 · PIDs</button>
+      </div>
+      <p class="muted">Antworten erscheinen im Protokoll.</p>
+    </div>
+  </section>
+
+  <!-- PROTOKOLL -->
+  <section class="tab" id="tab-log" hidden>
+    <div class="tab-title"><h1>Protokoll</h1></div>
+    <div class="card">
+      <div class="row" style="margin-bottom:10px">
+        <button class="btn" id="copy">Kopieren</button>
+        <button class="btn ghost" id="clear">Leeren</button>
+      </div>
+      <pre id="log"></pre>
+      <p class="muted">Bei Problemen das Protokoll kopieren und mitschicken – daran sieht man, wie der Adapter antwortet.</p>
     </div>
   </section>
 </main>
 
+<nav class="tabs" id="nav">
+  <button data-tab="diag" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>Diagnose</button>
+  <button data-tab="live"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 14l4-4"/><path d="M3.3 19a10 10 0 1 1 17.4 0"/></svg>Live</button>
+  <button data-tab="service"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.8-3.8a6 6 0 0 1-7.9 7.9l-6.9 6.9a2.1 2.1 0 0 1-3-3l6.9-6.9a6 6 0 0 1 7.9-7.9z"/></svg>Service</button>
+  <button data-tab="cat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20V3H6.5A2.5 2.5 0 0 0 4 5.5z"/><path d="M4 19.5A2.5 2.5 0 0 0 6.5 22H20v-5"/></svg>Katalog</button>
+  <button data-tab="expert"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m4 17 6-6-6-6M12 19h8"/></svg>Experte</button>
+  <button data-tab="log"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M8 13h8M8 17h8"/></svg>Protokoll</button>
+</nav>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
 <script>
+'use strict';
+// ---------------------------------------------------------------------------
+// Fault code catalog. Generic SAE J2012 codes; text is German for the UI.
+// Entry: [title, urgency ('hoch' | 'mittel' | 'gering'), likely causes (most
+// likely first), optional hint].
+// ---------------------------------------------------------------------------
+const DTC_CATALOG = {
+  P0087: ['Kraftstoffdruck im Verteilerrohr zu niedrig', 'hoch', ['Niederdruck-Kraftstoffpumpe im Tank schwach', 'Kraftstofffilter zugesetzt', 'Hochdruckpumpe verschlissen', 'Kraftstoffdrucksensor fehlerhaft', 'Tank fast leer gefahren'], 'Leistungsverlust und Notlauf möglich.'],
+  P0088: ['Kraftstoffdruck im Verteilerrohr zu hoch', 'mittel', ['Mengensteuer-/Druckregelventil', 'Kraftstoffdrucksensor', 'Stecker/Kabel am Sensor']],
+  P0100: ['Luftmassenmesser – Stromkreis', 'mittel', ['Stecker am Luftmassenmesser lose oder korrodiert', 'Luftmassenmesser defekt', 'Kabelbruch']],
+  P0101: ['Luftmassenmesser – Messbereich/Funktion', 'mittel', ['Falschluft zwischen Luftmassenmesser und Motor', 'Luftmassenmesser verschmutzt oder gealtert', 'Luftfilter stark verschmutzt', 'Ladeluftschlauch undicht (Turbo)']],
+  P0102: ['Luftmassenmesser – Signal zu niedrig', 'mittel', ['Stecker/Kabel unterbrochen', 'Luftmassenmesser defekt', 'Große Falschluft']],
+  P0103: ['Luftmassenmesser – Signal zu hoch', 'mittel', ['Luftmassenmesser defekt', 'Kurzschluss im Kabel']],
+  P0106: ['Saugrohrdrucksensor – Messbereich/Funktion', 'mittel', ['Falschluft im Ansaugtrakt', 'Sensor verschmutzt (Öl/Ruß)', 'Schlauch zum Sensor undicht']],
+  P0107: ['Saugrohrdrucksensor – Signal zu niedrig', 'mittel', ['Stecker/Kabel', 'Sensor defekt']],
+  P0108: ['Saugrohrdrucksensor – Signal zu hoch', 'mittel', ['Sensor defekt', 'Kurzschluss nach Plus']],
+  P0110: ['Ansauglufttemperatursensor – Stromkreis', 'gering', ['Stecker/Kabel', 'Sensor defekt (oft im Luftmassenmesser verbaut)']],
+  P0112: ['Ansauglufttemperatursensor – Signal zu niedrig', 'gering', ['Kurzschluss im Kabel', 'Sensor defekt']],
+  P0113: ['Ansauglufttemperatursensor – Signal zu hoch', 'gering', ['Stecker ab oder Kabelbruch', 'Sensor defekt']],
+  P0115: ['Kühlmitteltemperatursensor – Stromkreis', 'mittel', ['Stecker/Kabel', 'Sensor defekt']],
+  P0116: ['Kühlmitteltemperatursensor – Messbereich/Funktion', 'mittel', ['Thermostat klemmt', 'Sensor gealtert', 'Kühlmittelstand zu niedrig (Luft im System)']],
+  P0117: ['Kühlmitteltemperatursensor – Signal zu niedrig', 'mittel', ['Kurzschluss im Kabel', 'Sensor defekt']],
+  P0118: ['Kühlmitteltemperatursensor – Signal zu hoch', 'mittel', ['Stecker ab oder Kabelbruch', 'Sensor defekt']],
+  P0120: ['Drosselklappen-/Pedalwertgeber A – Stromkreis', 'hoch', ['Drosselklappe verschmutzt oder defekt', 'Stecker/Kabel'], 'Kann Notlauf mit reduzierter Leistung auslösen.'],
+  P0121: ['Drosselklappen-/Pedalwertgeber A – Messbereich/Funktion', 'hoch', ['Drosselklappe verschmutzt', 'Potentiometer verschlissen', 'Stecker korrodiert'], 'Kann Notlauf mit reduzierter Leistung auslösen.'],
+  P0122: ['Drosselklappen-/Pedalwertgeber A – Signal zu niedrig', 'hoch', ['Stecker/Kabel', 'Sensor defekt']],
+  P0123: ['Drosselklappen-/Pedalwertgeber A – Signal zu hoch', 'hoch', ['Kurzschluss im Kabel', 'Sensor defekt']],
+  P0128: ['Kühlmitteltemperatur unter Thermostat-Regeltemperatur', 'gering', ['Thermostat klemmt offen (bei BMW häufig, Kennfeldthermostat)', 'Kühlmitteltemperatursensor', 'Viel Kurzstrecke bei Frost – dann auch ohne Defekt möglich'], 'Motor wird zu langsam warm: höherer Verbrauch, Heizung bleibt lau.'],
+  P0171: ['Gemisch zu mager (Bank 1)', 'mittel', ['Falschluft: Ansaugtrakt, Unterdruckschläuche, Öleinfülldeckel', 'Kurbelgehäuseentlüftung (KGE-Ventil/Membran) undicht – bei BMW sehr häufig', 'Luftmassenmesser verschmutzt', 'Kraftstoffdruck zu niedrig (Pumpe, Filter)', 'Abgasleck vor der Lambdasonde', 'Injektoren verschmutzt'], 'In den Live-Daten den Langzeit-Trimm ansehen: deutlich über +10 % bestätigt Falschluft oder zu wenig Kraftstoff.'],
+  P0172: ['Gemisch zu fett (Bank 1)', 'mittel', ['Injektor tropft oder ist undicht', 'Luftmassenmesser misst zu wenig', 'Kraftstoffdruck zu hoch', 'Luftfilter zugesetzt', 'Lambdasonde vor Kat gealtert', 'Kühlmitteltemperatursensor meldet „kalt“']],
+  P0190: ['Kraftstoffdrucksensor – Stromkreis', 'mittel', ['Stecker/Kabel', 'Sensor defekt']],
+  P0191: ['Kraftstoffdrucksensor – Messbereich/Funktion', 'mittel', ['Sensor driftet', 'Hochdruckpumpe', 'Mengensteuerventil']],
+  P0192: ['Kraftstoffdrucksensor – Signal zu niedrig', 'mittel', ['Stecker/Kabel', 'Sensor defekt']],
+  P0193: ['Kraftstoffdrucksensor – Signal zu hoch', 'mittel', ['Sensor defekt', 'Kurzschluss im Kabel']],
+  P0200: ['Einspritzventile – Stromkreis', 'hoch', ['Kabelbaum zu den Injektoren', 'Injektor defekt', 'Endstufe im Motorsteuergerät']],
+  P0217: ['Motor-Übertemperatur', 'hoch', ['Zu wenig Kühlmittel (Leck)', 'Elektrische Wasserpumpe defekt (bei BMW häufig)', 'Thermostat klemmt geschlossen', 'Kühler zugesetzt oder Lüfter defekt', 'Zylinderkopfdichtung'], 'Bei Temperaturwarnung sofort anhalten und den Motor abstellen.'],
+  P0219: ['Drehzahl über Höchstwert', 'gering', ['Verschaltet (zu kleiner Gang)', 'Ohne erkennbaren Grund: Drehzahlsensor prüfen']],
+  P0234: ['Ladedruck zu hoch (Overboost)', 'mittel', ['Wastegate klemmt geschlossen', 'Ladedruckregelventil / Unterdruckdose', 'Ladedrucksensor', 'Unterdruckschlauch']],
+  P0236: ['Ladedrucksensor A – Messbereich/Funktion', 'mittel', ['Ladeluftschlauch undicht', 'Sensor verschmutzt', 'Stecker']],
+  P0237: ['Ladedrucksensor A – Signal zu niedrig', 'mittel', ['Stecker/Kabel', 'Sensor defekt']],
+  P0238: ['Ladedrucksensor A – Signal zu hoch', 'mittel', ['Sensor defekt', 'Kurzschluss im Kabel']],
+  P0299: ['Ladedruck zu niedrig (Underboost)', 'mittel', ['Ladeluftschlauch oder Ladeluftkühler undicht/geplatzt', 'Wastegate klemmt offen (oft hörbares Rasseln)', 'Unterdruckdose oder Unterdruckleitung', 'Ladedrucksensor', 'Turbolader verschlissen', 'Luftfilter zugesetzt'], 'Leistungsverlust und Notlauf möglich.'],
+  P0300: ['Zufällige/mehrfache Zündaussetzer', 'hoch', ['Zündkerzen verschlissen', 'Zündspule(n) defekt', 'Falschluft', 'Kraftstoffdruck zu niedrig', 'Injektoren', 'Kompressionsverlust', 'Steuerzeiten (Steuerkette)'], 'Blinkt die Motorkontrollleuchte, sanft und langsam fahren: unverbrannter Kraftstoff kann den Katalysator zerstören.'],
+  P0335: ['Kurbelwellensensor – Stromkreis', 'hoch', ['Sensor defekt', 'Öl im Stecker oder Kabel beschädigt', 'Geberrad beschädigt'], 'Motor kann ausgehen oder nicht anspringen.'],
+  P0336: ['Kurbelwellensensor – Messbereich/Funktion', 'hoch', ['Sensor verschmutzt oder Abstand falsch', 'Geberrad beschädigt', 'Stecker/Kabel']],
+  P0340: ['Nockenwellensensor A (Bank 1) – Stromkreis', 'mittel', ['Sensor defekt', 'Öl im Stecker', 'Kabel', 'Steuerzeiten falsch (Steuerkette)']],
+  P0341: ['Nockenwellensensor A (Bank 1) – Messbereich/Funktion', 'mittel', ['Steuerkette gelängt', 'Sensor', 'Geberrad']],
+  P0345: ['Nockenwellensensor A (Bank 2) – Stromkreis', 'mittel', ['Sensor defekt', 'Öl im Stecker', 'Kabel']],
+  P0365: ['Nockenwellensensor B (Bank 1) – Stromkreis', 'mittel', ['Sensor defekt', 'Öl im Stecker', 'Kabel']],
+  P0366: ['Nockenwellensensor B (Bank 1) – Messbereich/Funktion', 'mittel', ['Steuerkette gelängt', 'Sensor', 'Geberrad']],
+  P0380: ['Glühkerzen-Stromkreis A', 'mittel', ['Glühkerze durchgebrannt', 'Glühzeitsteuergerät', 'Stecker/Kabel'], 'Schlechter Kaltstart bei Frost.'],
+  P0400: ['Abgasrückführung – Durchfluss', 'mittel', ['AGR-Ventil verkokt', 'AGR-Kühler zugesetzt', 'Ansaugbrücke verrußt (Diesel)', 'Unterdruckleitung']],
+  P0401: ['Abgasrückführung – Durchfluss zu gering', 'mittel', ['AGR-Ventil verkokt/klemmt', 'AGR-Kanäle zugesetzt', 'AGR-Kühler zugesetzt']],
+  P0402: ['Abgasrückführung – Durchfluss zu hoch', 'mittel', ['AGR-Ventil klemmt offen', 'Ansteuerung AGR-Ventil']],
+  P0403: ['Abgasrückführung – Stromkreis', 'mittel', ['Stecker/Kabel am AGR-Ventil', 'AGR-Ventil defekt']],
+  P0404: ['Abgasrückführung – Messbereich/Funktion', 'mittel', ['AGR-Ventil verkokt', 'Positionssensor im AGR-Ventil']],
+  P0410: ['Sekundärluftsystem', 'gering', ['Sekundärluftpumpe defekt', 'Sekundärluftventil/Rückschlagventil', 'Schlauch undicht', 'Relais oder Sicherung']],
+  P0411: ['Sekundärluftsystem – falscher Durchfluss', 'gering', ['Sekundärluftventil verkokt', 'Pumpe schwach', 'Schlauch undicht']],
+  P0420: ['Katalysator-Wirkungsgrad unter Schwellwert (Bank 1)', 'mittel', ['Katalysator gealtert', 'Lambdasonde nach Kat defekt oder gealtert', 'Abgasleck vor/nach dem Kat', 'Folge von Zündaussetzern oder fettem Gemisch'], 'Zuerst andere Motorfehler beheben – sie schädigen den Kat oft erst. Für die AU ist der Code ein K.-o.-Kriterium.'],
+  P0430: ['Katalysator-Wirkungsgrad unter Schwellwert (Bank 2)', 'mittel', ['Katalysator gealtert', 'Lambdasonde nach Kat defekt oder gealtert', 'Abgasleck vor/nach dem Kat', 'Folge von Zündaussetzern oder fettem Gemisch'], 'Zuerst andere Motorfehler beheben – sie schädigen den Kat oft erst.'],
+  P0440: ['Tankentlüftung (EVAP) – Fehlfunktion', 'gering', ['Tankdeckel nicht richtig zu', 'Tankentlüftungsventil', 'Undichter Schlauch', 'Aktivkohlefilter']],
+  P0441: ['Tankentlüftung – falscher Spüldurchfluss', 'gering', ['Tankentlüftungsventil klemmt', 'Schlauch abgerutscht oder verstopft']],
+  P0442: ['Tankentlüftung – kleines Leck', 'gering', ['Tankdeckel-Dichtung', 'Schlauch porös', 'Tankentlüftungsventil undicht']],
+  P0443: ['Tankentlüftungsventil – Stromkreis', 'gering', ['Stecker/Kabel', 'Ventil defekt']],
+  P0455: ['Tankentlüftung – großes Leck', 'gering', ['Tankdeckel offen oder fehlt', 'Schlauch abgerutscht', 'Aktivkohlefilter beschädigt']],
+  P0456: ['Tankentlüftung – sehr kleines Leck', 'gering', ['Tankdeckel-Dichtung', 'Kleine Undichtigkeit an Schlauch oder Ventil']],
+  P0457: ['Tankentlüftung – Leck, Tankdeckel lose/fehlt', 'gering', ['Tankdeckel nicht eingerastet', 'Tankdeckel-Dichtung beschädigt']],
+  P0460: ['Tankgeber – Stromkreis', 'gering', ['Tankgeber (Schwimmer) defekt', 'Stecker/Kabel']],
+  P0461: ['Tankgeber – Messbereich/Funktion', 'gering', ['Tankgeber hängt', 'Schleifbahn verschlissen']],
+  P0462: ['Tankgeber – Signal zu niedrig', 'gering', ['Kurzschluss', 'Tankgeber defekt']],
+  P0463: ['Tankgeber – Signal zu hoch', 'gering', ['Unterbrechung', 'Tankgeber defekt']],
+  P0480: ['Kühlerlüfter 1 – Ansteuerung', 'mittel', ['Lüftermotor defekt', 'Lüftersteuerung/Relais', 'Sicherung', 'Stecker korrodiert'], 'Auf Kühlmitteltemperatur achten, besonders im Stau.'],
+  P0500: ['Fahrgeschwindigkeitssignal A', 'mittel', ['Raddrehzahlsensor', 'Kommunikation mit DSC/ABS', 'Stecker/Kabel']],
+  P0505: ['Leerlaufregelung', 'mittel', ['Drosselklappe verschmutzt', 'Falschluft', 'Leerlaufsteller']],
+  P0506: ['Leerlaufdrehzahl niedriger als erwartet', 'gering', ['Drosselklappe verschmutzt', 'Luftfilter zugesetzt', 'Hohe Last durch Nebenaggregate']],
+  P0507: ['Leerlaufdrehzahl höher als erwartet', 'gering', ['Falschluft', 'Drosselklappe klemmt', 'Kurbelgehäuseentlüftung undicht']],
+  P0520: ['Öldrucksensor/-schalter – Stromkreis', 'mittel', ['Öl im Stecker', 'Sensor defekt', 'Kabel']],
+  P0521: ['Öldrucksensor/-schalter – Messbereich/Funktion', 'hoch', ['Ölstand prüfen!', 'Sensor defekt', 'Ölpumpe/Öldruck tatsächlich zu niedrig']],
+  P0524: ['Öldruck zu niedrig', 'hoch', ['Ölstand zu niedrig', 'Falsches oder altes Öl', 'Ölpumpe/Ölfilter', 'Öldrucksensor'], 'Sofort Ölstand prüfen. Bei roter Öldruckwarnung den Motor abstellen.'],
+  P0530: ['Klimaanlage: Kältemitteldrucksensor – Stromkreis', 'gering', ['Drucksensor defekt', 'Stecker/Kabel', 'Zu wenig Kältemittel']],
+  P0544: ['Abgastemperatursensor (Bank 1, Sensor 1) – Stromkreis', 'mittel', ['Sensor defekt (Hitze)', 'Stecker/Kabel']],
+  P0545: ['Abgastemperatursensor (Bank 1, Sensor 1) – Signal zu niedrig', 'mittel', ['Kurzschluss', 'Sensor defekt']],
+  P0546: ['Abgastemperatursensor (Bank 1, Sensor 1) – Signal zu hoch', 'mittel', ['Unterbrechung', 'Sensor defekt']],
+  P0560: ['Bordnetzspannung', 'mittel', ['Batterie schwach', 'Lichtmaschine/Regler', 'Massekabel korrodiert']],
+  P0562: ['Bordnetzspannung zu niedrig', 'mittel', ['Batterie schwach oder entladen', 'Lichtmaschine lädt nicht', 'Massekabel/Polklemmen korrodiert', 'Ruhestromverbraucher entlädt die Batterie'], 'Viele weitere Fehler in anderen Steuergeräten können Folgefehler davon sein.'],
+  P0563: ['Bordnetzspannung zu hoch', 'mittel', ['Laderegler der Lichtmaschine defekt', 'Ladegerät/Starthilfe angeschlossen']],
+  P0597: ['Kennfeldthermostat – Heizung Stromkreis offen', 'mittel', ['Thermostat (elektrisch beheizt) defekt – bei BMW häufig', 'Stecker/Kabel']],
+  P0598: ['Kennfeldthermostat – Heizung Signal zu niedrig', 'mittel', ['Thermostat defekt', 'Kurzschluss im Kabel']],
+  P0599: ['Kennfeldthermostat – Heizung Signal zu hoch', 'mittel', ['Thermostat defekt', 'Kabel']],
+  P0600: ['Serielle Kommunikation (Steuergerät)', 'mittel', ['Bus-Kommunikation gestört', 'Unterspannung', 'Steuergerät']],
+  P0601: ['Motorsteuergerät – Prüfsumme Speicher', 'hoch', ['Software beschädigt (z. B. nach abgebrochener Programmierung)', 'Steuergerät defekt']],
+  P0603: ['Motorsteuergerät – Dauerspeicher (KAM)', 'gering', ['Batterie war abgeklemmt/leer', 'Steuergerät']],
+  P0604: ['Motorsteuergerät – RAM-Fehler', 'hoch', ['Steuergerät defekt', 'Unterspannung']],
+  P0605: ['Motorsteuergerät – ROM-Fehler', 'hoch', ['Software beschädigt', 'Steuergerät defekt']],
+  P0606: ['Motorsteuergerät – Prozessorfehler', 'hoch', ['Steuergerät defekt', 'Unterspannung/Spannungsspitzen', 'Software']],
+  P0627: ['Kraftstoffpumpe A – Ansteuerung offen', 'hoch', ['Kraftstoffpumpen-Steuergerät/Relais', 'Stecker/Kabel', 'Pumpe defekt']],
+  P0641: ['Sensor-Referenzspannung A – Stromkreis', 'hoch', ['Kurzschluss in einem der 5-V-versorgten Sensoren', 'Kabelbaum', 'Steuergerät'], 'Fallen mehrere Sensoren gleichzeitig aus, ist oft ein einzelner Sensor mit Kurzschluss schuld.'],
+  P0651: ['Sensor-Referenzspannung B – Stromkreis', 'hoch', ['Kurzschluss in einem 5-V-versorgten Sensor', 'Kabelbaum', 'Steuergerät']],
+  P0670: ['Glühzeitsteuergerät – Stromkreis', 'mittel', ['Glühzeitsteuergerät', 'Stecker/Kabel', 'Sicherung']],
+  P0700: ['Getriebesteuerung meldet einen Fehler', 'mittel', ['Siehe Fehlerspeicher Getriebe (EGS) im BMW Komplett-Scan']],
+  P0705: ['Gangwahlschalter – Stromkreis', 'mittel', ['Gangwahlschalter/Wählhebel', 'Stecker/Kabel', 'Getriebeelektronik']],
+  P0715: ['Turbinendrehzahlsensor – Stromkreis', 'hoch', ['Sensor in der Mechatronik', 'Stecker (Ölverlust an der Steckerhülse)', 'Getriebeelektronik']],
+  P0720: ['Abtriebsdrehzahlsensor – Stromkreis', 'hoch', ['Sensor', 'Stecker/Kabel', 'Getriebeelektronik']],
+  P0730: ['Falsches Übersetzungsverhältnis', 'hoch', ['Getriebeölstand zu niedrig', 'Getriebeöl alt', 'Kupplungen/Mechatronik', 'Software'], 'Schonend fahren und Getriebeölstand prüfen lassen.'],
+  P0740: ['Wandlerüberbrückungskupplung – Stromkreis', 'mittel', ['Magnetventil in der Mechatronik', 'Stecker', 'Getriebeelektronik']],
+  P0741: ['Wandlerüberbrückungskupplung – Funktion/klemmt offen', 'mittel', ['Getriebeöl alt oder zu wenig', 'Wandlerkupplung verschlissen', 'Magnetventil']],
+  P0750: ['Schaltmagnetventil A', 'mittel', ['Magnetventil in der Mechatronik', 'Stecker/Kabel', 'Getriebeöl verschmutzt']],
+  P2002: ['Partikelfilter-Wirkungsgrad unter Schwellwert (Bank 1)', 'mittel', ['Partikelfilter beschädigt/gerissen', 'Differenzdrucksensor oder dessen Schläuche', 'Manipulation/Leerrohr']],
+  P2004: ['Saugrohrklappen klemmen offen (Bank 1)', 'gering', ['Saugrohrklappen verkokt', 'Stellmotor/Unterdruckdose', 'Gestänge gebrochen']],
+  P2096: ['Gemisch nach Kat zu mager (Bank 1)', 'mittel', ['Abgasleck vor der Sonde nach Kat', 'Lambdasonde nach Kat', 'Falschluft']],
+  P2097: ['Gemisch nach Kat zu fett (Bank 1)', 'mittel', ['Lambdasonde vor Kat gealtert', 'Katalysator', 'Injektor undicht']],
+  P2098: ['Gemisch nach Kat zu mager (Bank 2)', 'mittel', ['Abgasleck vor der Sonde nach Kat', 'Lambdasonde nach Kat', 'Falschluft']],
+  P2099: ['Gemisch nach Kat zu fett (Bank 2)', 'mittel', ['Lambdasonde vor Kat gealtert', 'Katalysator', 'Injektor undicht']],
+  P2177: ['Gemisch außerhalb Leerlauf zu mager (Bank 1)', 'mittel', ['Luftmassenmesser verschmutzt', 'Kraftstoffdruck zu niedrig', 'Ladeluftschlauch undicht', 'Injektoren']],
+  P2178: ['Gemisch außerhalb Leerlauf zu fett (Bank 1)', 'mittel', ['Luftmassenmesser', 'Injektor undicht', 'Kraftstoffdruck zu hoch']],
+  P2179: ['Gemisch außerhalb Leerlauf zu mager (Bank 2)', 'mittel', ['Luftmassenmesser verschmutzt', 'Kraftstoffdruck zu niedrig', 'Ladeluftschlauch undicht', 'Injektoren']],
+  P2180: ['Gemisch außerhalb Leerlauf zu fett (Bank 2)', 'mittel', ['Luftmassenmesser', 'Injektor undicht', 'Kraftstoffdruck zu hoch']],
+  P2181: ['Kühlsystem – Funktion', 'mittel', ['Thermostat klemmt', 'Kühlmittelstand zu niedrig', 'Elektrische Wasserpumpe', 'Kühlmitteltemperatursensor']],
+  P2187: ['Gemisch im Leerlauf zu mager (Bank 1)', 'mittel', ['Falschluft (Unterdruckschläuche, Ansaugbrücke)', 'Kurbelgehäuseentlüftung undicht – bei BMW sehr häufig', 'Öleinfülldeckel-Dichtung', 'Tankentlüftungsventil klemmt offen']],
+  P2188: ['Gemisch im Leerlauf zu fett (Bank 1)', 'mittel', ['Injektor tropft', 'Tankentlüftungsventil klemmt offen', 'Luftmassenmesser']],
+  P2189: ['Gemisch im Leerlauf zu mager (Bank 2)', 'mittel', ['Falschluft (Unterdruckschläuche, Ansaugbrücke)', 'Kurbelgehäuseentlüftung undicht', 'Öleinfülldeckel-Dichtung']],
+  P2190: ['Gemisch im Leerlauf zu fett (Bank 2)', 'mittel', ['Injektor tropft', 'Tankentlüftungsventil klemmt offen', 'Luftmassenmesser']],
+  P2195: ['Lambdasonde (Bank 1, Sensor 1) zeigt dauerhaft mager', 'mittel', ['Lambdasonde gealtert', 'Falschluft oder Abgasleck vor der Sonde', 'Kraftstoffdruck zu niedrig']],
+  P2196: ['Lambdasonde (Bank 1, Sensor 1) zeigt dauerhaft fett', 'mittel', ['Lambdasonde gealtert/verrußt', 'Injektor undicht', 'Kraftstoffdruck zu hoch']],
+  P2200: ['NOx-Sensor (Bank 1) – Stromkreis', 'mittel', ['NOx-Sensor defekt', 'Stecker/Kabel', 'Steuergerät des Sensors']],
+  P2263: ['Turbolader – Ladedrucksystem Funktion', 'mittel', ['Ladeluftschlauch undicht', 'Ladedrucksteller/Wastegate', 'Turbolader', 'Ladedrucksensor']],
+  P2270: ['Lambdasonde (Bank 1, Sensor 2) bleibt mager', 'mittel', ['Abgasleck vor der Sonde', 'Lambdasonde nach Kat defekt', 'Falschluft']],
+  P2271: ['Lambdasonde (Bank 1, Sensor 2) bleibt fett', 'mittel', ['Lambdasonde nach Kat defekt', 'Gemisch zu fett (siehe P0172)']],
+  P2279: ['Ansaugsystem undicht', 'mittel', ['Kurbelgehäuseentlüftung (KGE) undicht – bei BMW sehr häufig', 'Dichtung Ansaugbrücke', 'Unterdruckschlauch abgerutscht/gerissen', 'Öleinfülldeckel-Dichtung'], 'Typisch ist ein Pfeif- oder Zischgeräusch im Leerlauf.'],
+  P244A: ['Partikelfilter – Differenzdruck zu niedrig (Bank 1)', 'mittel', ['Schlauch zum Differenzdrucksensor ab oder gerissen', 'Differenzdrucksensor', 'Partikelfilter beschädigt']],
+  P244B: ['Partikelfilter – Differenzdruck zu hoch (Bank 1)', 'mittel', ['Partikelfilter voll (viel Kurzstrecke)', 'Regeneration unterbrochen', 'Differenzdrucksensor'], 'Eine längere Fahrt (20–30 min Autobahn) kann die Regeneration ermöglichen.'],
+  P2452: ['Partikelfilter-Differenzdrucksensor A – Stromkreis', 'mittel', ['Sensor defekt', 'Stecker/Kabel']],
+  P2453: ['Partikelfilter-Differenzdrucksensor A – Messbereich/Funktion', 'mittel', ['Schläuche zum Sensor vertauscht/verstopft/gerissen', 'Sensor defekt']],
+  P2463: ['Partikelfilter – Rußbeladung zu hoch', 'hoch', ['Viel Kurzstrecke, Regeneration nicht abgeschlossen', 'Injektoren/AGR erzeugen zu viel Ruß', 'Differenzdrucksensor'], 'Längere Fahrt versuchen; leuchtet die Warnung weiter, Werkstatt – ein überladener Filter kann beim Regenerieren Schaden nehmen.'],
+  P20EE: ['SCR-Katalysator (AdBlue) – Wirkungsgrad unter Schwellwert (Bank 1)', 'mittel', ['AdBlue-Qualität/kristallisiert', 'AdBlue-Dosierventil verstopft', 'NOx-Sensor', 'SCR-Katalysator'], 'Bei AdBlue-Fehlern zählt das Auto oft Kilometer bis zur Startsperre herunter.'],
+  U0001: ['CAN-Bus (High-Speed) – Kommunikation', 'mittel', ['Unterspannung/Batterie schwach', 'Steuergerät stört den Bus', 'Stecker/Kabel am Bus']],
+  U0073: ['Steuergeräte-Bus aus (Bus off)', 'mittel', ['Unterspannung', 'Kurzschluss am Bus', 'Defektes Steuergerät']],
+  U0100: ['Keine Kommunikation mit Motorsteuergerät', 'hoch', ['Unterspannung beim Start', 'Stecker/Kabel', 'Motorsteuergerät ohne Versorgung (Sicherung)']],
+  U0101: ['Keine Kommunikation mit Getriebesteuergerät', 'mittel', ['Unterspannung', 'Stecker an der Mechatronik', 'Getriebesteuergerät']],
+  U0121: ['Keine Kommunikation mit ABS/DSC', 'mittel', ['Unterspannung', 'Stecker/Kabel', 'DSC-Steuergerät']],
+  U0140: ['Keine Kommunikation mit Karosseriesteuergerät', 'mittel', ['Unterspannung', 'Karosseriesteuergerät (FEM/BDC)']],
+  U0151: ['Keine Kommunikation mit Airbag-Steuergerät', 'mittel', ['Unterspannung', 'Stecker/Kabel', 'Airbag-Steuergerät']],
+  U0155: ['Keine Kommunikation mit Kombiinstrument', 'mittel', ['Unterspannung', 'Stecker am Kombi', 'Kombiinstrument']],
+  U0164: ['Keine Kommunikation mit Klimabedienteil', 'gering', ['Unterspannung', 'Klimasteuergerät/Stecker']],
+};
+// Bank 2 variants of the lean/rich codes share causes with bank 1.
+DTC_CATALOG.P0174 = [DTC_CATALOG.P0171[0].replace('Bank 1', 'Bank 2'), ...DTC_CATALOG.P0171.slice(1)];
+DTC_CATALOG.P0175 = [DTC_CATALOG.P0172[0].replace('Bank 1', 'Bank 2'), ...DTC_CATALOG.P0172.slice(1)];
+
+const LAMBDA_FAULTS = ['Stromkreis – Fehlfunktion', 'Spannung zu niedrig', 'Spannung zu hoch', 'reagiert zu langsam', 'keine Aktivität', 'Heizung – Stromkreis'];
+const HEATER_CAUSES = ['Heizung der Lambdasonde defekt (Sonde tauschen)', 'Stecker/Kabel (Hitze, Marderbiss)', 'Sicherung oder Relais'];
+
+// Codes that follow a numbering pattern (per cylinder, per sensor) are
+// generated instead of listed one by one.
+function dtcFamily(code) {
+  if (code[0] !== 'P' || code[1] !== '0' || !/^\d{3}$/.test(code.slice(2))) return null;
+  const n = Number(code.slice(2));
+  if ((n >= 10 && n <= 15) || (n >= 20 && n <= 25)) {
+    const bank = n < 20 ? 1 : 2;
+    const k = n % 10;
+    const cam = k < 3 ? 'A (Einlass)' : 'B (Auslass)';
+    if (k % 3 === 0) {
+      return [`VANOS-Stellglied Nockenwelle ${cam}, Bank ${bank} – Stromkreis`, 'mittel',
+        ['VANOS-Magnetventil defekt', 'Stecker/Kabel am Magnetventil', 'Endstufe im Motorsteuergerät']];
+    }
+    return [`Nockenwelle ${cam}, Bank ${bank}: Steuerzeit ${k % 3 === 1 ? 'zu früh' : 'zu spät'}`, 'mittel',
+      ['Ölstand zu niedrig, Öl zu alt oder falsche Viskosität', 'VANOS-Magnetventil verschmutzt (Sieb)', 'VANOS-Versteller', 'Steuerkette gelängt']];
+  }
+  if (n >= 16 && n <= 19) {
+    return [`Kurbelwelle/Nockenwelle passen nicht zusammen (Bank ${n < 18 ? 1 : 2}, Sensor ${n % 2 ? 'B (Auslass)' : 'A (Einlass)'})`, 'hoch',
+      ['Steuerkette gelängt oder übergesprungen (z. B. bei BMW N20/N47 bekannt)', 'Nockenwellen- oder Kurbelwellensensor', 'VANOS-Magnetventil/Versteller', 'Geberrad beschädigt'],
+      'Bei Kettenrasseln nach dem Kaltstart zeitnah prüfen lassen – eine gerissene Kette zerstört den Motor.'];
+  }
+  if ([30, 31, 32, 36, 37, 38, 50, 51, 52, 56, 57, 58].includes(n)) {
+    // xx0/xx6: control circuit, xx1/xx7: low, xx2/xx8: high
+    const k = n % 10, bank = n < 50 ? 1 : 2, sensor = k < 5 ? 1 : 2;
+    const what = ['Ansteuerung', 'Signal zu niedrig', 'Signal zu hoch'][k % 6];
+    return [`Lambdasonden-Heizung (Bank ${bank}, Sensor ${sensor}) – ${what}`, 'gering', HEATER_CAUSES];
+  }
+  const o2 = [[130, 1, 1], [136, 1, 2], [142, 1, 3], [150, 2, 1], [156, 2, 2], [162, 2, 3]].find(([b]) => n >= b && n < b + 6);
+  if (o2) {
+    const [b, bank, sensor] = o2, k = n - b;
+    const pos = sensor === 1 ? 'vor Kat' : 'nach Kat';
+    const causes = k === 5 ? HEATER_CAUSES : sensor === 1
+      ? ['Lambdasonde gealtert/defekt', 'Abgasleck vor der Sonde', 'Gemischfehler (Falschluft, Kraftstoffdruck)', 'Stecker/Kabel']
+      : ['Lambdasonde defekt', 'Abgasleck', 'Katalysator', 'Stecker/Kabel'];
+    return [`Lambdasonde Bank ${bank}, Sensor ${sensor} (${pos}) – ${LAMBDA_FAULTS[k]}`, sensor === 1 ? 'mittel' : 'gering', causes];
+  }
+  if (n >= 201 && n <= 212) {
+    return [`Einspritzventil Zylinder ${n - 200} – Stromkreis`, 'hoch',
+      ['Injektor defekt', 'Stecker/Kabel am Injektor', 'Endstufe im Motorsteuergerät'], 'Führt meist zu Zündaussetzern auf diesem Zylinder.'];
+  }
+  if (n >= 261 && n <= 296) {
+    const cyl = Math.floor((n - 261) / 3) + 1, k = (n - 261) % 3;
+    return [`Einspritzventil Zylinder ${cyl} – ${['Stromkreis niedrig', 'Stromkreis hoch', 'Mengenabweichung/Beitrag'][k]}`, 'hoch',
+      k === 2 ? ['Injektor verkokt oder verschlissen', 'Kompressionsverlust auf diesem Zylinder', 'Injektor-Abgleichwert'] : ['Stecker/Kabel', 'Injektor defekt', 'Steuergerät']];
+  }
+  if (n >= 301 && n <= 312) {
+    return [`Zündaussetzer Zylinder ${n - 300}`, 'hoch',
+      ['Zündspule dieses Zylinders (Tauschtest mit Nachbarzylinder)', 'Zündkerze verschlissen', 'Injektor dieses Zylinders', 'Kompressionsverlust (Ventil, Kolbenringe)', 'Falschluft nahe diesem Zylinder'],
+      'Zündspule mit dem Nachbarzylinder tauschen: wandert der Fehler mit, ist es die Spule. Blinkt die Motorkontrollleuchte, sanft fahren – Katalysator in Gefahr.'];
+  }
+  if (n >= 325 && n <= 334) {
+    const s = n < 330 ? 1 : 2;
+    return [`Klopfsensor ${s} (Bank ${s}) – ${['Stromkreis', 'Messbereich/Funktion', 'Signal zu niedrig', 'Signal zu hoch', 'Signal sporadisch'][(n - 325) % 5]}`, 'mittel',
+      ['Stecker korrodiert', 'Klopfsensor defekt oder falsches Anzugsmoment', 'Kabel beschädigt']];
+  }
+  if (n >= 351 && n <= 362) {
+    return [`Zündspule Zylinder ${n - 350} – Primär-/Sekundärkreis`, 'hoch',
+      ['Zündspule defekt', 'Zündkerze verschlissen (überlastet die Spule)', 'Stecker/Kabel an der Spule']];
+  }
+  if (n >= 671 && n <= 678) {
+    return [`Glühkerze Zylinder ${n - 670} – Stromkreis`, 'gering',
+      ['Glühkerze durchgebrannt', 'Stecker an der Glühkerze', 'Glühzeitsteuergerät'], 'Merkt man meist nur am schlechteren Kaltstart bei Frost.'];
+  }
+  return null;
+}
+
+// Fallback by SAE code range when neither catalog nor family matches.
+function dtcCategory(code) {
+  const sys = { P: 'Antrieb (Motor/Getriebe)', C: 'Fahrwerk (ABS, Lenkung, Federung)', B: 'Karosserie (Airbag, Komfort, Licht)', U: 'Netzwerk/Kommunikation zwischen Steuergeräten' }[code[0]];
+  if (code[0] === 'P' && (code[1] === '0' || code[1] === '2')) {
+    const area = {
+      0: 'Kraftstoff-/Luftzumessung und Zusatz-Abgasreinigung', 1: 'Kraftstoff- und Luftzumessung', 2: 'Kraftstoff- und Luftzumessung (Einspritzung)',
+      3: 'Zündsystem oder Zündaussetzer', 4: 'Zusätzliche Abgasreinigung', 5: 'Geschwindigkeit, Leerlauf und Hilfseingänge',
+      6: 'Steuergerät und Ausgangssignale', 7: 'Getriebe', 8: 'Getriebe', 9: 'Getriebe', A: 'Hybrid-/Elektroantrieb', B: 'Hybrid-/Elektroantrieb', C: 'Hybrid-/Elektroantrieb',
+    }[code[2]];
+    return area ? `Genormter Code, Bereich: ${area}` : `Genormter Code, ${sys}`;
+  }
+  if (code[1] === '1' || code[1] === '3') return `Herstellerspezifischer Code, ${sys}`;
+  return sys ? `Genormter Code, ${sys}` : 'Unbekanntes Format';
+}
+
+function describeDtc(code) {
+  const hit = DTC_CATALOG[code] || dtcFamily(code);
+  if (hit) return { title: hit[0], sev: hit[1], causes: hit[2], hint: hit[3] || '', known: true };
+  return { title: dtcCategory(code), sev: 'unbekannt', causes: [], hint: 'Für diesen Code gibt es keinen Katalog-Eintrag. Über „Im Netz suchen“ findest du Erfahrungen anderer Fahrer, oder speichere eine eigene Notiz.', known: false };
+}
+
+// Typical causes per BMW control unit, from common experience – a starting
+// point, not an official BMW fault text.
+const ECU_HINTS = {
+  '01': ['Stecker unter den Sitzen (nach Sitzausbau oder Teppichreinigung)', 'Sitzbelegungserkennung Beifahrersitz', 'Gurtschloss-Schalter', 'Wickelfeder im Lenkrad'],
+  '10': ['Meist Folgefehler: Unterspannung, Batterie war abgeklemmt', 'Steuergerät antwortete nicht (Busruhe)'],
+  '12': ['Zündspulen/Zündkerzen', 'Kurbelgehäuseentlüftung/Falschluft', 'Lambdasonden', 'Kennfeldthermostat/elektrische Wasserpumpe', 'Ladedruck (Schläuche, Wastegate)', 'Genormte P-Codes liefert zusätzlich der Schnelltest'],
+  '18': ['Getriebeölstand/Ölalter', 'Ölverlust an der Steckerhülse der Mechatronik', 'Unterspannung beim Start', 'Software'],
+  '29': ['Raddrehzahlsensor', 'Bremslichtschalter', 'Lenkwinkelsensor nicht kalibriert', 'Unterspannung'],
+  '30': ['Lenkwinkel nach Batteriewechsel oder Achsvermessung nicht angelernt', 'Unterspannung'],
+  '40': ['Fensterheber/Zentralverriegelung', 'Lichtfunktionen', 'Komfortzugang', 'Unterspannung'],
+  '56': ['Schiebedach/Innenlicht', 'Notruf-Taste/Mikrofon', 'Unterspannung'],
+  '60': ['Oft Folgefehler anderer Steuergeräte', 'Datum/Uhrzeit nicht gesetzt (wichtig für CBS)', 'Unterspannung'],
+  '63': ['Software', 'Antennen/Bluetooth/Navigation', 'Folgefehler nach Unterspannung'],
+  '78': ['Stellmotoren der Klappen', 'Temperaturfühler', 'Gebläse/Gebläseregler', 'Kältemitteldruck zu niedrig'],
+};
+
+// ---------------------------------------------------------------------------
+// Adapter connection (Web Bluetooth) and ELM327 command layer.
+// ---------------------------------------------------------------------------
 // Services that common BLE OBD adapters expose. Web Bluetooth only lets us
 // open services listed up front, so this list is deliberately broad.
 // Full 128-bit strings only: some iOS Web Bluetooth browsers reject numeric
 // or named UUIDs.
-const VERSION = 'v10';
+const VERSION = 'v11';
 const OAD_SERVICE_PREFIX = 'f000ffc0';
 const short = (n) => `0000${n}-0000-1000-8000-00805f9b34fb`;
 const KNOWN_SERVICES = [
@@ -118,8 +732,16 @@ const errText = (e) => e instanceof Error ? `${e.name}: ${e.message}`
   : typeof e === 'string' ? e : JSON.stringify(e) ?? String(e);
 
 const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* storage blocked */ } },
+};
 const logEl = $('log');
 let device, tx, rx, buffer = '', waiter = null, protocol = null;
+let sim = null;        // demo adapter, set instead of tx/rx
+let linked = false;    // a data channel is open
+let busMode = null;    // 'obd' after init(), 'bmw' after bmwSetup()
 
 function log(line) {
   const t = new Date().toLocaleTimeString('de-DE');
@@ -129,15 +751,25 @@ function log(line) {
 
 function setStatus(text, cls = '') {
   $('status').textContent = text;
-  $('status').className = cls;
+  $('connPill').className = `pill ${cls}`;
+}
+
+let toastTimer;
+function toast(text) {
+  const el = $('toast');
+  el.textContent = text;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2600);
 }
 
 function setConnected(on) {
-  $('connect').disabled = on;
-  $('disconnect').disabled = !on;
-  document.querySelectorAll('[data-cmd], #raw, #send').forEach((el) => {
-    el.disabled = !(on && tx && rx);
-  });
+  linked = on && !!(sim || (tx && rx));
+  $('connect').hidden = on;
+  $('demo').hidden = on;
+  $('disconnect').hidden = !on;
+  document.querySelectorAll('[data-needs-link]').forEach((el) => { el.disabled = !linked; });
+  if (!linked) { protocol = null; busMode = null; stopLive(); }
 }
 
 function propsOf(c) {
@@ -147,10 +779,12 @@ function propsOf(c) {
 
 async function connect() {
   if (!navigator.bluetooth) {
-    setStatus('Dieser Browser kann kein Bluetooth. Auf dem iPhone: Bluefy verwenden.', 'err');
+    setStatus('Kein Bluetooth im Browser', 'err');
+    toast('Dieser Browser kann kein Bluetooth. Auf dem iPhone: Bluefy verwenden.');
     return;
   }
   const extra = $('extra').value.split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
+  store.set('obd.extra', $('extra').value);
   let stage = 'Gerätewahl';
   try {
     device = await navigator.bluetooth.requestDevice({
@@ -164,7 +798,7 @@ async function connect() {
       setConnected(false);
     });
     log(`Gerät gewählt: ${device.name || '(ohne Namen)'} · id ${device.id}`);
-    setStatus('Verbinde …');
+    setStatus('Verbinde …', 'busy');
     stage = 'Verbindungsaufbau';
     const server = await device.gatt.connect();
     stage = 'Service-Suche';
@@ -188,9 +822,9 @@ async function connect() {
     candidates.sort((a, b) => Number(b.s.uuid.toLowerCase() === short('ffe0'))
       - Number(a.s.uuid.toLowerCase() === short('ffe0')));
     if (!candidates.length) {
-      setStatus('Verbunden, aber kein Daten-Kanal gefunden', 'err');
+      setStatus('Kein Daten-Kanal', 'err');
       log('Kein Service mit Schreib- und Benachrichtigungs-Characteristic gefunden.');
-      log('Tipp: Mit "nRF Connect" (App Store) die Service-UUIDs des Adapters ansehen und oben eintragen.');
+      log('Tipp: Mit "nRF Connect" (App Store) die Service-UUIDs des Adapters ansehen und unter „Erweitert“ eintragen.');
       setConnected(true);
       return;
     }
@@ -198,17 +832,19 @@ async function connect() {
     await rx.startNotifications();
     rx.addEventListener('characteristicvaluechanged', onData);
     log(`Daten-Kanal: senden über ${tx.uuid}, empfangen über ${rx.uuid}`);
-    setStatus(`Verbunden: ${device.name || 'Adapter'}`, 'ok');
+    setStatus(device.name || 'Adapter verbunden', 'ok');
     setConnected(true);
+    exclusive('Lese Bordspannung …', readVoltage);
   } catch (e) {
     log(`Fehler bei ${stage}: ${errText(e)}`);
     if (stage === 'Gerätewahl' && e?.name === 'NotFoundError') {
       setStatus('Abgebrochen', 'err');
     } else if (stage === 'Service-Suche') {
-      setStatus('Verbunden, aber keine bekannten Dienste. UUIDs mit nRF Connect ermitteln und oben eintragen.', 'err');
+      setStatus('Unbekannte Dienste', 'err');
+      toast('Adapter nutzt unbekannte Service-UUIDs – mit nRF Connect ermitteln und unter „Erweitert“ eintragen.');
       log('Der Adapter nutzt Service-UUIDs, die nicht in der Liste stehen.');
     } else {
-      setStatus(`Fehler bei ${stage}: ${errText(e)}`, 'err');
+      setStatus(`Fehler: ${stage}`, 'err');
     }
   }
 }
@@ -220,6 +856,10 @@ function onData(ev) {
   if (!printable) {
     log(`<- (binär) ${[...bytes].map((b) => b.toString(16).padStart(2, '0')).join(' ')}`);
   }
+  onText(text);
+}
+
+function onText(text) {
   buffer += text;
   // ELM327 ends every reply with the ">" prompt.
   if (buffer.includes('>') && waiter) {
@@ -229,26 +869,36 @@ function onData(ev) {
   }
 }
 
-function send(cmd, timeout = 6000) {
+async function writeLine(cmd) {
+  if (sim) {
+    const reply = sim.reply(cmd);
+    setTimeout(() => onText(`${reply}\r\r>`), 25 + Math.random() * 50);
+    return;
+  }
+  const data = new TextEncoder().encode(cmd + '\r');
+  if (tx.properties.writeWithoutResponse) await tx.writeValueWithoutResponse(data);
+  else await tx.writeValueWithResponse(data);
+}
+
+// `quiet` keeps high-rate polling (live data) out of the log.
+function send(cmd, timeout = 6000, quiet = false) {
   return new Promise(async (resolve) => {
     buffer = '';
     const timer = setTimeout(() => {
       waiter = null;
-      log(`<- (keine Antwort mit ">" nach ${timeout / 1000}s) ${JSON.stringify(buffer)}`);
+      log(`<- (keine Antwort mit ">" nach ${timeout / 1000}s auf ${cmd}) ${JSON.stringify(buffer)}`);
       resolve(null);
     }, timeout);
     waiter = (reply) => {
       clearTimeout(timer);
       waiter = null;
       const clean = reply.replace(/\r/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean);
-      log(`<- ${clean.join(' | ') || '(leer)'}`);
+      if (!quiet) log(`<- ${clean.join(' | ') || '(leer)'}`);
       resolve(clean);
     };
-    log(`-> ${cmd}`);
-    const data = new TextEncoder().encode(cmd + '\r');
+    if (!quiet) log(`-> ${cmd}`);
     try {
-      if (tx.properties.writeWithoutResponse) await tx.writeValueWithoutResponse(data);
-      else await tx.writeValueWithResponse(data);
+      await writeLine(cmd);
     } catch (e) {
       clearTimeout(timer);
       waiter = null;
@@ -261,10 +911,13 @@ function send(cmd, timeout = 6000) {
 // The adapter sometimes answers every command with something other than ELM
 // output (seen: echo + "Health360"). Stop early instead of sending a scan.
 async function resetElm() {
+  protocol = null;
+  busMode = null;
   const r = await send('ATZ', 8000);
   if (r && r.some((l) => l.includes('ELM327'))) return true;
   log(`Adapter antwortet nicht als ELM327 (${JSON.stringify(r)}). Abbruch.`);
-  setStatus('Adapter hängt im „Health“-Modus: 30 s ausstecken, wieder einstecken, neu verbinden.', 'err');
+  setStatus('Adapter im „Health“-Modus', 'err');
+  toast('Adapter hängt: 30 s ausstecken, wieder einstecken, neu verbinden.');
   return false;
 }
 
@@ -275,7 +928,16 @@ async function init() {
   const dp = await send('ATDPN');
   const n = dp && dp[0] ? parseInt(dp[0].replace(/^A/, ''), 16) : NaN;
   protocol = Number.isNaN(n) ? null : n;
+  busMode = 'obd';
   log(`Protokoll: ${protocol ?? 'unbekannt'}${protocol >= 6 && protocol <= 9 ? ' (CAN)' : ''}`);
+  return true;
+}
+
+// Generic OBD functions need the adapter in plain OBD mode (headers off,
+// automatic protocol); BMW functions leave it in raw CAN mode.
+async function ensureObd() {
+  if (busMode === 'obd' && protocol != null) return true;
+  return init();
 }
 
 // Hex lines → byte arrays. Drops status text like "SEARCHING..." and the
@@ -307,8 +969,8 @@ function payload(lines, sid) {
 const dtcName = (w) => 'PCBU'[w >> 14] + ((w >> 12) & 3)
   + (w & 0x0fff).toString(16).toUpperCase().padStart(3, '0');
 
-// Mode 03/07 reply → DTC strings like "P0133". CAN replies carry a count byte
-// after the service id; older protocols pad to three codes per line.
+// Mode 03/07/0A reply → DTC strings like "P0133". CAN replies carry a count
+// byte after the service id; older protocols pad to three codes per line.
 function parseDtcs(lines, sid) {
   const words = [];
   if (protocol >= 6 && protocol <= 9) {
@@ -322,37 +984,130 @@ function parseDtcs(lines, sid) {
   return [...new Set(words.filter(Boolean).map(dtcName))];
 }
 
-async function readDtcs() {
-  if (protocol == null && (await init()) === false) return;
-  const stored = (await send('03', 15000)) || [];
-  const pending = (await send('07', 15000)) || [];
-  const box = $('dtcs');
-  const s = parseDtcs(stored, 0x43);
-  const p = parseDtcs(pending, 0x47);
-  box.innerHTML = '';
-  const add = (title, list) => {
-    const div = document.createElement('div');
-    div.innerHTML = `<b>${title}:</b> ` + (list.length ? list.map((c) => `<span class="dtc">${c}</span>`).join('') : 'keine');
-    box.appendChild(div);
-  };
-  add('Gespeichert', s);
-  add('Ausstehend', p);
+// ---------------------------------------------------------------------------
+// Generic OBD-II data: PIDs (mode 01/02), readiness, vehicle info (mode 09).
+// ---------------------------------------------------------------------------
+const w16 = (a) => a[0] * 256 + a[1];
+const PIDS = {
+  0x04: { name: 'Motorlast', unit: '%', f: (a) => a[0] * 100 / 255, min: 0, max: 100 },
+  0x05: { name: 'Kühlmittel', unit: '°C', f: (a) => a[0] - 40, min: -20, max: 130, warn: 112 },
+  0x06: { name: 'Kurzzeit-Trimm B1', unit: '%', f: (a) => (a[0] - 128) * 100 / 128, min: -25, max: 25, dec: 1 },
+  0x07: { name: 'Langzeit-Trimm B1', unit: '%', f: (a) => (a[0] - 128) * 100 / 128, min: -25, max: 25, dec: 1, warnAbs: 10 },
+  0x08: { name: 'Kurzzeit-Trimm B2', unit: '%', f: (a) => (a[0] - 128) * 100 / 128, min: -25, max: 25, dec: 1 },
+  0x09: { name: 'Langzeit-Trimm B2', unit: '%', f: (a) => (a[0] - 128) * 100 / 128, min: -25, max: 25, dec: 1, warnAbs: 10 },
+  0x0B: { name: 'Saugrohrdruck', unit: 'kPa', f: (a) => a[0], min: 0, max: 255 },
+  0x0C: { name: 'Drehzahl', unit: '1/min', f: (a) => w16(a) / 4, min: 0, max: 7000, warn: 6200 },
+  0x0D: { name: 'Geschwindigkeit', unit: 'km/h', f: (a) => a[0], min: 0, max: 250 },
+  0x0E: { name: 'Zündzeitpunkt', unit: '°', f: (a) => a[0] / 2 - 64, min: -20, max: 60, dec: 1 },
+  0x0F: { name: 'Ansaugluft', unit: '°C', f: (a) => a[0] - 40, min: -20, max: 80 },
+  0x10: { name: 'Luftmasse', unit: 'g/s', f: (a) => w16(a) / 100, min: 0, max: 250, dec: 1 },
+  0x11: { name: 'Drosselklappe', unit: '%', f: (a) => a[0] * 100 / 255, min: 0, max: 100 },
+  0x1F: { name: 'Laufzeit seit Start', unit: 'min', f: (a) => w16(a) / 60, min: 0, max: 120, dec: 1 },
+  0x21: { name: 'Gefahren mit Warnleuchte', unit: 'km', f: w16, min: 0, max: 1000 },
+  0x2F: { name: 'Tankfüllstand', unit: '%', f: (a) => a[0] * 100 / 255, min: 0, max: 100 },
+  0x31: { name: 'Seit Fehler-Löschen', unit: 'km', f: w16, min: 0, max: 5000 },
+  0x33: { name: 'Luftdruck', unit: 'kPa', f: (a) => a[0], min: 70, max: 110 },
+  0x42: { name: 'Bordspannung', unit: 'V', f: (a) => w16(a) / 1000, min: 10, max: 16, dec: 2 },
+  0x46: { name: 'Außentemperatur', unit: '°C', f: (a) => a[0] - 40, min: -20, max: 45 },
+  0x5C: { name: 'Öltemperatur', unit: '°C', f: (a) => a[0] - 40, min: -20, max: 150, warn: 135 },
+  0x5E: { name: 'Verbrauch', unit: 'l/h', f: (a) => w16(a) / 20, min: 0, max: 30, dec: 1 },
+};
+const GAUGE_PIDS = [0x0C, 0x0D, 0x05, 0x5C];
+const FAST_PIDS = [0x0C, 0x0D, 0x04, 0x11, 0x10];
+
+async function supportedPids() {
+  const set = new Set();
+  for (const base of [0x00, 0x20, 0x40]) {
+    if (base && !set.has(base)) break;
+    const p = payload(await send('01' + hex2(base), 8000), 0x41);
+    if (!p || p[1] !== base) break;
+    for (let i = 0; i < 32; i++) if (p[2 + (i >> 3)] & (0x80 >> (i & 7))) set.add(base + i + 1);
+  }
+  log(`Unterstützte Live-Werte: ${[...set].filter((p) => PIDS[p]).map((p) => PIDS[p].name).join(', ') || 'keine'}`);
+  return set;
 }
 
-async function readVin() {
-  if (protocol == null && (await init()) === false) return;
-  const lines = (await send('0902', 15000)) || [];
-  const p = payload(lines, 0x49);
-  const vin = p ? String.fromCharCode(...p.slice(3).filter((b) => b >= 0x30 && b <= 0x5a)) : '';
-  log(`VIN: ${vin.length === 17 ? vin : 'nicht erkannt'}`);
+async function readPid(pid, quiet = true) {
+  const p = payload(await send('01' + hex2(pid), 4000, quiet), 0x41);
+  if (!p || p[1] !== pid || p.length < 3) return null;
+  return PIDS[pid].f(p.slice(2));
 }
 
+// Mode 01 PID 01: warning lamp, code count and the emission self-tests.
+const READY_SPARK = ['Katalysator', 'Kat-Heizung', 'Tankentlüftung', 'Sekundärluft', 'Klimaanlage', 'Lambdasonden', 'Lambdasonden-Heizung', 'Abgasrückführung/VVT'];
+const READY_DIESEL = ['NMHC-Katalysator', 'NOx/SCR-Nachbehandlung', null, 'Ladedruck', null, 'Abgassensor', 'Partikelfilter', 'Abgasrückführung/VVT'];
+function parseReadiness([a, b, c, d]) {
+  const diesel = !!(b & 0x08);
+  const tests = [];
+  ['Zündaussetzer', 'Kraftstoffsystem', 'Bauteile'].forEach((name, i) => {
+    if (b & (1 << i)) tests.push({ name, done: !(b & (0x10 << i)) });
+  });
+  (diesel ? READY_DIESEL : READY_SPARK).forEach((name, i) => {
+    if (name && (c & (1 << i))) tests.push({ name, done: !(d & (1 << i)) });
+  });
+  return { mil: !!(a & 0x80), count: a & 0x7f, diesel, tests, open: tests.filter((t) => !t.done).length };
+}
+
+async function readReadiness() {
+  const p = payload(await send('0101', 8000), 0x41);
+  return p && p[1] === 0x01 && p.length >= 6 ? parseReadiness(p.slice(2, 6)) : null;
+}
+
+async function readFreezeFrame() {
+  const p = payload(await send('020200', 8000), 0x42);
+  if (!p || p[1] !== 0x02 || p.length < 5) return null;
+  const w = (p[3] << 8) | p[4];
+  if (!w) return null;
+  const out = { dtc: dtcName(w), values: [] };
+  for (const pid of [0x0C, 0x0D, 0x05, 0x04, 0x11, 0x06, 0x07, 0x0B, 0x0F]) {
+    const q = payload(await send('02' + hex2(pid) + '00', 5000), 0x42);
+    if (q && q[1] === pid && q.length > 3) out.values.push({ pid, v: PIDS[pid].f(q.slice(3)) });
+  }
+  return out;
+}
+
+// Mode 09 strings (VIN, calibration id, ECU name): 49 <pid> <count> ascii…
+async function readInfoString(pid) {
+  const p = payload(await send('09' + hex2(pid), 15000), 0x49);
+  if (!p || p[1] !== pid) return '';
+  return String.fromCharCode(...p.slice(3).filter((b) => b >= 0x20 && b < 0x7f)).trim();
+}
+
+let lastVoltage = null;
+async function readVoltage() {
+  const r = await send('ATRV', 4000);
+  const v = r && r[0] ? parseFloat(r[0].replace(',', '.')) : NaN;
+  lastVoltage = Number.isFinite(v) ? v : null;
+  const pill = $('battPill');
+  pill.hidden = lastVoltage == null;
+  if (lastVoltage != null) pill.textContent = `${fmt(lastVoltage, 1)} V`;
+  return lastVoltage;
+}
+
+// Lead-acid/AGM resting voltage after >= 2 h standstill.
+function batteryVerdict(v, running) {
+  if (running) {
+    if (v >= 15.2) return ['err', 'Zu hohe Ladespannung', 'Laderegler der Lichtmaschine prüfen lassen.'];
+    if (v >= 13.2) return ['ok', 'Lichtmaschine lädt', 'Normaler Ladebereich.'];
+    if (v >= 12.5) return ['warn', 'Niedrige Ladespannung', 'BMW lädt bedarfsgesteuert und senkt die Spannung zeitweise. Bleibt sie bei höherer Drehzahl so niedrig, Lichtmaschine prüfen.'];
+    return ['err', 'Lichtmaschine lädt nicht', 'Batterie wird entladen – Lichtmaschine/Regler prüfen lassen.'];
+  }
+  if (v >= 12.6) return ['ok', 'Voll geladen (ca. 100 %)', 'Alles in Ordnung.'];
+  if (v >= 12.4) return ['ok', 'Gut geladen (ca. 75 %)', 'In Ordnung.'];
+  if (v >= 12.2) return ['warn', 'Halb geladen (ca. 50 %)', 'Längere Fahrt oder Ladegerät. Viel Kurzstrecke entlädt die Batterie.'];
+  if (v >= 12.0) return ['warn', 'Schwach (ca. 25 %)', 'Bald laden. Bleibt der Wert nach dem Laden niedrig, ist die Batterie verschlissen.'];
+  return ['err', 'Entladen', 'Batterie laden. Bei Unterspannung legen viele Steuergeräte Folgefehler ab.'];
+}
+
+// ---------------------------------------------------------------------------
 // BMW F-series diagnostics: UDS over D-CAN with extended addressing. Requests
 // go out on 0x6F1 with the ECU address as first data byte; answers come back
 // on 0x600 + address with 0xF1 first. This adapter ignores ATCEA, so CAN
-// auto-formatting is switched off and ISO-TP is done by hand. Only
-// Scans send only TesterPresent (3E) and ReadDTCInformation (19); bmwClear
-// is the one place that writes (14 ClearDiagnosticInformation).
+// auto-formatting is switched off and ISO-TP is done by hand. Scans send only
+// TesterPresent (3E), ReadDTCInformation (19) and ReadDataByIdentifier (22);
+// bmwClear (14 ClearDiagnosticInformation) and the unlocked expert console are
+// the only places that write.
+// ---------------------------------------------------------------------------
 const ECU_NAMES = {
   '01': 'Airbag (ACSM)', '10': 'Gateway (ZGW)', '12': 'Motor (DME/DDE)',
   '18': 'Getriebe (EGS)', '29': 'DSC (ABS/ESP)', '30': 'Lenkung (EPS)',
@@ -429,12 +1184,14 @@ async function bmwRequest(ecu, ...service) {
 }
 
 // 59 02 <availability mask> then 4 bytes per DTC: 3-byte code + status.
+// Status bits (ISO 14229): 0 failed now, 2 pending, 3 confirmed, 7 lamp on.
 function bmwDtcs(p) {
   if (!p || p[0] !== 0x59) return null;
   const list = [];
   for (let i = 3; i + 3 < p.length; i += 4) {
     const st = p[i + 3];
-    list.push({ code: p.slice(i, i + 3).map(hex2).join(''), active: !!(st & 0x01), stored: !!(st & 0x08) });
+    list.push({ code: p.slice(i, i + 3).map(hex2).join(''), active: !!(st & 0x01), pending: !!(st & 0x04),
+      stored: !!(st & 0x08), lamp: !!(st & 0x80) });
   }
   return list;
 }
@@ -446,7 +1203,15 @@ async function bmwSetup() {
     const r = await send(c, 4000);
     if (r && r.some((l) => l.includes('?'))) log(`Hinweis: Adapter kennt "${c}" nicht.`);
   }
+  busMode = 'bmw';
   return true;
+}
+
+// Back to a clean ELM state so generic OBD functions start fresh.
+async function bmwDone() {
+  await send('ATZ', 8000);
+  protocol = null;
+  busMode = null;
 }
 
 async function bmwDiscover() {
@@ -465,108 +1230,730 @@ async function bmwDiscover() {
 }
 
 let lastEcus = [];
+const ecuName = (ecu) => ECU_NAMES[ecu] || `Steuergerät 0x${ecu}`;
 
 // ClearDiagnosticInformation (14 FF FF FF = all groups) on every ECU found by
 // the last scan, plus the DME, which does not always answer the broadcast.
-// This is the only service on the page that changes anything in the car.
 async function bmwClear() {
   log('--- BMW: Fehlerspeicher löschen ---');
   if (!(await bmwSetup())) return;
   const ecus = [...new Set([...(lastEcus.length ? lastEcus : await bmwDiscover()), '12'])].sort();
   let cleared = 0;
   for (const ecu of ecus) {
+    setBusy(`Lösche ${ecuName(ecu)} …`);
     const r = await bmwRequest(ecu, '14', 'FF', 'FF', 'FF');
     const ok = r?.data[0] === 0x54;
     if (ok) cleared++;
     log(`0x${ecu} ${ECU_NAMES[ecu] || ''}: ${ok ? 'gelöscht ✓' : `nicht gelöscht (${r ? r.data.map(hex2).join(' ') : 'keine Antwort'})`}`);
   }
   log(`--- Gelöscht: ${cleared} von ${ecus.length} – lese neu aus ---`);
-  await bmwScan();
+  toast(`Gelöscht in ${cleared} von ${ecus.length} Steuergeräten`);
+  await bmwScanInner();
 }
 
-async function bmwScan() {
+async function bmwScanInner() {
   log('--- BMW: Steuergeräte und Fehlerspeicher (nur lesen) ---');
-  const box = $('bmw');
-  box.innerHTML = '<span class="muted">Suche Steuergeräte …</span>';
+  const box = $('bmwResult');
+  setBusy('Suche Steuergeräte …');
   if (!(await bmwSetup())) {
-    box.innerHTML = '<span style="color:var(--err)">Adapter ist nicht im ELM327-Modus. 30 s ausstecken, wieder einstecken, neu verbinden.</span>';
+    box.innerHTML = '<div class="banner err">Adapter ist nicht im ELM327-Modus. 30 s ausstecken, wieder einstecken, neu verbinden.</div>';
     return;
   }
   const ecus = await bmwDiscover();
   lastEcus = ecus;
-  box.innerHTML = '';
+  fillEcuSelect();
+  const results = [];
   for (const ecu of ecus) {
-    const name = ECU_NAMES[ecu] || `Steuergerät 0x${ecu}`;
+    setBusy(`Lese Fehlerspeicher: ${ecuName(ecu)} …`);
     const r = await bmwRequest(ecu, '19', '02', '0C');
     const dtcs = r?.complete ? bmwDtcs(r.data) : null;
-    let html;
-    if (r && !r.complete && r.data[0] === 0x59) {
-      // The first frame still tells us how many entries there are.
-      const n = Math.floor((r.need - 3) / 4);
-      html = `<span style="color:var(--err)">${n} Fehler – Codes nicht vollständig empfangen</span>`;
-    } else if (dtcs == null) {
-      html = `<span class="muted">Fehlerspeicher nicht lesbar (${r ? r.data.map(hex2).join(' ') : 'keine Antwort'})</span>`;
-    } else if (!dtcs.length) {
-      html = '<span style="color:var(--ok)">keine Fehler</span>';
-    } else {
-      html = dtcs.map((d) => `<span class="dtc">${d.code} <span class="muted">${d.active ? '● aktiv' : 'gespeichert'}</span></span>`).join('');
-    }
-    log(`0x${ecu} ${name}: ${dtcs == null ? 'nicht lesbar' : dtcs.length + ' Fehler'}${dtcs?.length ? ' – ' + dtcs.map((d) => d.code).join(', ') : ''}`);
-    const div = document.createElement('div');
-    div.style.margin = '6px 0';
-    div.innerHTML = `<b>${name}</b> <span class="muted">0x${ecu}</span><br>${html}`;
-    box.appendChild(div);
+    const res = { ecu, dtcs, raw: r };
+    // The first frame still tells us how many entries there are.
+    if (r && !r.complete && r.data[0] === 0x59) res.partial = Math.floor((r.need - 3) / 4);
+    results.push(res);
+    log(`0x${ecu} ${ecuName(ecu)}: ${dtcs == null ? 'nicht lesbar' : dtcs.length + ' Fehler'}${dtcs?.length ? ' – ' + dtcs.map((d) => d.code).join(', ') : ''}`);
   }
-  if (!ecus.length) box.innerHTML = '<span class="muted">Keine Steuergeräte gefunden. Zündung an?</span>';
-  else box.insertAdjacentHTML('beforeend', '<p class="muted">● aktiv = Fehler liegt gerade an. Gespeichert = trat früher auf. Codes sind BMW-Fehlercodes (hex).</p>');
-  await send('ATZ', 8000);
-  protocol = null;
+  await bmwDone();
+  const prev = lastHistory('bmw');
+  const codes = results.flatMap((r) => (r.dtcs || []).map((d) => `${r.ecu}:${d.code}`));
+  addHistory('bmw', codes);
+  lastBmw = results;
+  renderBmw(results, prev);
+  updateSummary();
   log(`--- BMW fertig: ${ecus.length} Steuergerät(e) ---`);
 }
 
+// ---------------------------------------------------------------------------
+// Demo adapter: answers like a Carly/ELM327 adapter on a BMW F-series car so
+// the app can be tried without a car. All values are simulated.
+// ---------------------------------------------------------------------------
+function makeSim() {
+  const t0 = Date.now();
+  const ascii = (s) => [...s].map((c) => c.charCodeAt(0));
+  const hx = (bytes) => bytes.map(hex2).join(' ');
+  const VIN = 'WBA0DEMO000000001';
+  const obdCodes = { 0x03: [0x0171, 0x0420], 0x07: [0x0302], 0x0A: [0x0420] };
+  const ecus = {
+    '01': [], '10': [], '12': [{ c: [0x1B, 0x2A, 0x01], s: 0x08 }, { c: [0x21, 0xB7, 0x12], s: 0x09 }], '18': [],
+    '29': [{ c: [0x48, 0x06, 0xA0], s: 0x08 }], '30': [], '40': [{ c: [0x80, 0x2A, 0x1F], s: 0x08 }],
+    '60': [], '63': [], '78': [{ c: [0x80, 0x1A, 0x2B], s: 0x2C }],
+  };
+  const pids = [0x01, 0x04, 0x05, 0x06, 0x07, 0x0B, 0x0C, 0x0D, 0x0E, 0x0F, 0x10, 0x11, 0x1F, 0x20, 0x21, 0x2F, 0x31, 0x33, 0x40, 0x42, 0x46, 0x5C];
+  let headers = false;
+  const queued = {};
+
+  const mask = (base) => {
+    const m = [0, 0, 0, 0];
+    for (const p of pids) if (p > base && p <= base + 32) { const i = p - base - 1; m[i >> 3] |= 0x80 >> (i & 7); }
+    return m;
+  };
+  function pidBytes(pid) {
+    const t = (Date.now() - t0) / 1000;
+    const rpm = 1650 + 1250 * Math.sin(t / 2.7) + 120 * Math.sin(t * 1.3);
+    const coolant = Math.min(91, 55 + t * 0.9);
+    switch (pid) {
+      case 0x01: return [0x83, 0x07, 0x65, 0x04];
+      case 0x04: return [Math.round((28 + 20 * Math.sin(t / 2.7)) * 2.55)];
+      case 0x05: return [Math.round(coolant + 40)];
+      case 0x06: return [Math.round(128 + 6 * Math.sin(t))];
+      case 0x07: return [Math.round(128 + 14.5 * 1.28)];
+      case 0x0B: return [Math.round(60 + 50 * Math.sin(t / 2.7))];
+      case 0x0C: { const v = Math.round(rpm * 4); return [v >> 8, v & 0xff]; }
+      case 0x0D: return [Math.max(0, Math.round(72 + 38 * Math.sin(t / 6)))];
+      case 0x0E: return [Math.round((14 + 6 * Math.sin(t)) * 2 + 128)];
+      case 0x0F: return [Math.round(24 + 40)];
+      case 0x10: { const v = Math.round((12 + 9 * Math.sin(t / 2.7)) * 100); return [v >> 8, v & 0xff]; }
+      case 0x11: return [Math.round((18 + 14 * Math.sin(t / 2.7)) * 2.55)];
+      case 0x1F: { const v = Math.round(t + 300); return [v >> 8, v & 0xff]; }
+      case 0x21: return [0, 42];
+      case 0x2F: return [Math.round(0.63 * 255)];
+      case 0x31: return [0x01, 0x2C];
+      case 0x33: return [101];
+      case 0x42: { const v = Math.round(14.05 * 1000); return [v >> 8, v & 0xff]; }
+      case 0x46: return [12 + 40];
+      case 0x5C: return [Math.round(Math.min(98, 50 + t * 0.7) + 40)];
+      default: return null;
+    }
+  }
+  function obd(c) {
+    const mode = parseInt(c.slice(0, 2), 16);
+    if (mode === 0x01) {
+      const pid = parseInt(c.slice(2, 4), 16);
+      if (pid % 0x20 === 0) return hx([0x41, pid, ...mask(pid)]);
+      const b = pidBytes(pid);
+      return b ? hx([0x41, pid, ...b]) : 'NO DATA';
+    }
+    if (mode === 0x02) {
+      const pid = parseInt(c.slice(2, 4), 16);
+      if (pid === 0x02) return hx([0x42, 0x02, 0x00, 0x01, 0x71]);
+      const b = pidBytes(pid);
+      return b ? hx([0x42, pid, 0x00, ...b]) : 'NO DATA';
+    }
+    if (obdCodes[mode]) {
+      const list = obdCodes[mode];
+      return hx([0x40 + mode, list.length, ...list.flatMap((w) => [w >> 8, w & 0xff])]);
+    }
+    if (mode === 0x04) { obdCodes[0x03] = []; obdCodes[0x07] = []; return '44'; }
+    if (mode === 0x09) {
+      const pid = parseInt(c.slice(2, 4), 16);
+      const s = { 0x02: VIN, 0x04: 'DEMO-CAL-0815', 0x0A: 'ECM-DME-DEMO' }[pid];
+      return s ? hx([0x49, pid, 0x01, ...ascii(s)]) : 'NO DATA';
+    }
+    return 'NO DATA';
+  }
+  function line(ecu, data) { return `6${ecu} F1 ${hx(data.concat(Array(7).fill(0xAA)).slice(0, 7))}`; }
+  function frames(ecu, resp) {
+    if (resp.length <= 6) return line(ecu, [resp.length, ...resp]);
+    const cf = [];
+    for (let i = 5, seq = 1; i < resp.length; i += 6, seq++) cf.push(line(ecu, [0x20 | (seq & 0x0f), ...resp.slice(i, i + 6)]));
+    queued[ecu] = cf;
+    return line(ecu, [0x10 | (resp.length >> 8), resp.length & 0xff, ...resp.slice(0, 5)]);
+  }
+  function service(ecu, s) {
+    const dids = { 0xF190: ascii(VIN), 0xF18C: ascii(`SN${ecu}4711`), 0xF197: ascii((ECU_NAMES[ecu] || 'ECU').split(' ')[0].toUpperCase()) };
+    switch (s[0]) {
+      case 0x3E: return [0x7E, 0x00];
+      case 0x19: return s[1] === 0x02 ? [0x59, 0x02, 0xFF, ...ecus[ecu].flatMap((d) => [...d.c, d.s])] : [0x7F, 0x19, 0x12];
+      case 0x14: ecus[ecu] = ecus[ecu].filter((d) => d.s & 0x01); return [0x54];
+      case 0x22: { const v = dids[(s[1] << 8) | s[2]]; return v ? [0x62, s[1], s[2], ...v] : [0x7F, 0x22, 0x31]; }
+      case 0x10: return [0x50, s[1], 0x00, 0x32, 0x01, 0xF4];
+      default: return [0x7F, s[0], 0x11];
+    }
+  }
+  function bmw(main) {
+    const b = main.match(/../g).map((h) => parseInt(h, 16));
+    const ecu = hex2(b[0]);
+    if (b[1] >> 4 === 3) { const q = queued[ecu] || []; delete queued[ecu]; return q.join('\r') || 'NO DATA'; }
+    const svc = b.slice(2, 2 + (b[1] & 0x0f));
+    if (ecu === BMW_FUNCTIONAL) return svc[0] === 0x3E ? Object.keys(ecus).map((e) => line(e, [0x02, 0x7E, 0x00])).join('\r') : 'NO DATA';
+    if (!ecus[ecu]) return 'NO DATA';
+    return frames(ecu, service(ecu, svc));
+  }
+  return {
+    reply(cmd) {
+      const main = cmd.trim().toUpperCase().split(/\s+/)[0];
+      if (main.startsWith('AT')) {
+        if (main === 'ATZ') { headers = false; return 'ELM327 v1.5'; }
+        if (main === 'ATI') return 'ELM327 v1.5 (Demo)';
+        if (main === 'ATRV') return `${(13.9 + Math.random() * 0.3).toFixed(1)}V`;
+        if (main === 'ATDPN') return 'A6';
+        if (main === 'ATH1') headers = true;
+        if (main === 'ATH0') headers = false;
+        return 'OK';
+      }
+      if (!/^[0-9A-F]+$/.test(main)) return '?';
+      return headers ? (main.length === 16 ? bmw(main) : 'NO DATA') : obd(main);
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// UI: one adapter, one job at a time.
+// ---------------------------------------------------------------------------
+let busy = false;
+function setBusy(label) {
+  $('busy').hidden = !label;
+  $('busyLabel').textContent = label || '';
+}
+
+async function exclusive(label, fn) {
+  if (!linked) { toast('Bitte zuerst den Adapter verbinden.'); return; }
+  if (busy) { toast('Adapter ist noch beschäftigt …'); return; }
+  busy = true;
+  setBusy(label);
+  try {
+    await stopLive();
+    return await fn();
+  } catch (e) {
+    log(`Fehler: ${errText(e)}`);
+    toast('Fehler – Details im Protokoll.');
+  } finally {
+    busy = false;
+    setBusy(null);
+  }
+}
+
+function showTab(name) {
+  document.querySelectorAll('.tab').forEach((t) => { t.hidden = t.id !== `tab-${name}`; });
+  document.querySelectorAll('#nav button').forEach((b) => {
+    if (b.dataset.tab === name) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  store.set('obd.tab', name);
+  window.scrollTo(0, 0);
+}
+
+// History of scans (last 15) so new codes can be marked.
+function lastHistory(kind) { return store.get('obd.history', []).find((h) => h.kind === kind) || null; }
+function addHistory(kind, codes) {
+  const h = store.get('obd.history', []);
+  h.unshift({ t: Date.now(), kind, codes });
+  store.set('obd.history', h.slice(0, 15));
+  renderHistory();
+}
+function renderHistory() {
+  const h = store.get('obd.history', []);
+  $('history').innerHTML = h.length ? h.map((e) => `<div class="history-item">
+      <span class="muted">${new Date(e.t).toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' })}</span>
+      <b>${e.kind === 'bmw' ? 'BMW-Scan' : 'Schnelltest'}</b>
+      ${e.codes.length ? e.codes.map((c) => `<span class="code">${esc(c.replace(/^(..):/, '0x$1 · '))}</span>`).join(' ') : '<span class="tag">keine Fehler</span>'}
+    </div>`).join('') : '<p class="empty">Noch keine Tests gespeichert.</p>';
+}
+
+const notes = () => store.get('obd.notes', {});
+function noteUi(key) {
+  const n = notes()[key] || '';
+  return `<div class="note-box"><label class="small">Eigene Notiz</label>
+    <textarea data-note="${esc(key)}" placeholder="z. B. was die Werkstatt gesagt hat">${esc(n)}</textarea>
+    <div class="row" style="margin-top:6px"><button class="btn small" data-save-note="${esc(key)}">Notiz speichern</button>
+    <a class="btn small ghost" target="_blank" rel="noopener" href="https://www.google.com/search?q=${encodeURIComponent(`BMW Fehlercode ${key.split(':').pop()}`)}">Im Netz suchen ↗</a></div></div>`;
+}
+
+const SEV_LABEL = { hoch: 'Dringend', mittel: 'Prüfen lassen', gering: 'Beobachten', unbekannt: 'Unbekannt' };
+function dtcCard(code, tags = []) {
+  const d = describeDtc(code);
+  const note = notes()[code];
+  return `<details class="dtc">
+    <summary><span class="code">${code}</span><span class="dtc-title">${esc(d.title)}</span><span class="sev ${d.sev}">${SEV_LABEL[d.sev]}</span>
+      ${tags.length || note ? `<span class="tags">${tags.join('')}${note ? '<span class="tag">📝 Notiz</span>' : ''}</span>` : ''}</summary>
+    <div class="dtc-body">
+      ${d.causes.length ? `<b>Wahrscheinliche Ursachen</b> <span class="muted">(häufigste zuerst)</span><ol>${d.causes.map((c) => `<li>${esc(c)}</li>`).join('')}</ol>` : ''}
+      ${d.hint ? `<p class="hint">${esc(d.hint)}</p>` : ''}
+      ${noteUi(code)}
+    </div></details>`;
+}
+
+function bmwDtcCard(ecu, d, isNew) {
+  const key = `${ecu}:${d.code}`;
+  const note = notes()[key] || notes()[d.code];
+  const tags = [
+    d.active ? '<span class="tag active">● aktiv</span>' : '<span class="tag">gespeichert</span>',
+    d.pending && !d.stored ? '<span class="tag">sporadisch</span>' : '',
+    d.lamp ? '<span class="tag active">Warnleuchte</span>' : '',
+    isNew ? '<span class="tag new">neu</span>' : '',
+    note ? '<span class="tag">📝 Notiz</span>' : '',
+  ].join('');
+  return `<details class="dtc">
+    <summary><span class="code">${d.code}</span><span class="dtc-title">${note ? esc(note.split('\n')[0]) : 'BMW-Fehlercode'}</span>
+      <span class="sev ${d.active ? 'mittel' : 'gering'}">${d.active ? 'Liegt an' : 'Vergangen'}</span><span class="tags">${tags}</span></summary>
+    <div class="dtc-body">
+      <p>${d.active ? 'Der Fehler liegt <b>gerade an</b> – Löschen hilft nicht, er kommt sofort wieder.' : 'Der Fehler trat <b>früher</b> auf und liegt derzeit nicht an.'}</p>
+      ${ECU_HINTS[ecu] ? `<b>Häufige Ursachen in diesem Steuergerät</b> <span class="muted">(Erfahrungswerte, keine BMW-Diagnose)</span><ol>${ECU_HINTS[ecu].map((c) => `<li>${esc(c)}</li>`).join('')}</ol>` : ''}
+      ${noteUi(key)}
+    </div></details>`;
+}
+
+let lastObd = null, lastBmw = null, lastReady = null;
+
+function renderObd(r, prev) {
+  const prevSet = new Set(prev?.codes || []);
+  const sec = (title, codes, tag) => codes.length ? `<h3>${title}</h3><div class="dtc-list">${codes.map((c) =>
+    dtcCard(c, [tag, prev && !prevSet.has(c) ? '<span class="tag new">neu</span>' : ''].filter(Boolean))).join('')}</div>` : '';
+  const total = new Set([...r.stored, ...r.pending, ...r.permanent]).size;
+  $('obdResult').innerHTML = `<div class="card">
+    <div class="card-head"><div><h2>Motor (OBD-Schnelltest)</h2></div><span class="count ${total ? 'some' : 'zero'}">${total ? `${total} Code${total > 1 ? 's' : ''}` : 'keine Fehler'}</span></div>
+    ${total ? '' : '<div class="banner ok">Das Motorsteuergerät meldet keine genormten Fehlercodes.</div>'}
+    ${sec('Gespeichert', r.stored, '<span class="tag active">gespeichert</span>')}
+    ${sec('Ausstehend (noch nicht bestätigt)', r.pending, '<span class="tag">ausstehend</span>')}
+    ${sec('Permanent (erlischt erst nach erfolgreichem Selbsttest)', r.permanent, '<span class="tag">permanent</span>')}
+    ${r.ff ? `<h3>Umgebungsbedingungen beim Fehler ${r.ff.dtc}</h3><table class="kv">${r.ff.values.map(({ pid, v }) =>
+      `<tr><td>${PIDS[pid].name}</td><td><b>${fmt(v, PIDS[pid].dec)}</b> ${PIDS[pid].unit}</td></tr>`).join('')}</table>` : ''}
+  </div>`;
+}
+
+function renderBmw(results, prev) {
+  const prevSet = new Set(prev?.codes || []);
+  const box = $('bmwResult');
+  if (!results.length) { box.innerHTML = '<div class="card"><div class="banner warn">Keine Steuergeräte gefunden. Zündung an?</div></div>'; return; }
+  const total = results.reduce((n, r) => n + (r.dtcs?.length || r.partial || 0), 0);
+  const stored = results.reduce((n, r) => n + (r.dtcs || []).filter((d) => !d.active).length, 0);
+  const lowVolt = lastVoltage != null && lastVoltage < 12.2;
+  box.innerHTML = `<div class="card">
+    <div class="card-head"><div><h2>BMW-Steuergeräte</h2></div><span class="count ${total ? 'some' : 'zero'}">${results.length} Geräte · ${total} Fehler</span></div>
+    ${total >= 6 && stored >= total / 2 ? `<div class="banner warn" style="margin-bottom:10px">Viele vergangene Fehler in mehreren Steuergeräten: oft Folge von Unterspannung
+      (schwache Batterie, Starthilfe, Batteriewechsel)${lowVolt ? ` – deine Spannung ist mit ${fmt(lastVoltage, 1)} V niedrig` : ''}. Batterie prüfen, Fehler löschen und beobachten, was wiederkommt.</div>` : ''}
+    <div class="ecu-grid">${results.map((r) => {
+      let body, badge;
+      if (r.partial != null) { badge = `<span class="count some">${r.partial} Fehler</span>`; body = '<div class="banner warn">Codes nicht vollständig empfangen – Scan wiederholen.</div>'; }
+      else if (r.dtcs == null) { badge = '<span class="count na">nicht lesbar</span>'; body = `<p class="muted">Antwort: ${r.raw ? r.raw.data.map(hex2).join(' ') : 'keine'}</p>`; }
+      else if (!r.dtcs.length) { badge = '<span class="count zero">keine Fehler</span>'; body = ''; }
+      else { badge = `<span class="count some">${r.dtcs.length} Fehler</span>`; body = `<div class="dtc-list">${r.dtcs.map((d) => bmwDtcCard(r.ecu, d, prev && !prevSet.has(`${r.ecu}:${d.code}`))).join('')}</div>`; }
+      return `<div class="ecu"><div class="ecu-head"><div><b>${esc(ecuName(r.ecu))}</b> <span class="muted mono">0x${r.ecu}</span></div>${badge}</div>${body}</div>`;
+    }).join('')}</div>
+    <p class="muted">BMW-Codes sind 6-stellige Herstellercodes. Über eine eigene Notiz bekommt ein Code dauerhaft einen Namen.</p>
+  </div>`;
+}
+
+function fmt(v, dec = 0) { return v == null ? '–' : Number(v).toLocaleString('de-DE', { minimumFractionDigits: dec, maximumFractionDigits: dec }); }
+
+function setStat(id, value, cls = '') {
+  const el = $(id);
+  el.className = `stat ${cls}`;
+  el.querySelector('b').textContent = value;
+}
+
+function updateSummary() {
+  const obdCodes = lastObd ? new Set([...lastObd.stored, ...lastObd.pending, ...lastObd.permanent]).size : null;
+  const bmwCodes = lastBmw ? lastBmw.reduce((n, r) => n + (r.dtcs?.length || r.partial || 0), 0) : null;
+  if (obdCodes != null || bmwCodes != null) {
+    const total = (obdCodes || 0) + (bmwCodes || 0);
+    setStat('stFaults', total, total ? 'warn' : 'ok');
+  }
+  if (lastReady) {
+    setStat('stMil', lastReady.mil ? 'An' : 'Aus', lastReady.mil ? 'err' : 'ok');
+    setStat('stReady', lastReady.open ? `${lastReady.open} offen` : 'Bereit', lastReady.open ? 'warn' : 'ok');
+  }
+  if (lastVoltage != null) {
+    const [cls] = batteryVerdict(lastVoltage, lastVoltage > 13);
+    setStat('stBatt', `${fmt(lastVoltage, 1)} V`, cls);
+  }
+  $('sumTime').textContent = `Stand ${new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' })}`;
+  const hints = [];
+  if (lastReady?.mil) hints.push('<div class="banner err" style="margin-top:10px">Die Motorkontrollleuchte ist an. Details unten bei den Motor-Fehlern.</div>');
+  if (lastVoltage != null && lastVoltage < 12.0) hints.push('<div class="banner warn" style="margin-top:10px">Bordspannung niedrig – Batterie laden, bevor du Fehler bewertest oder löschst.</div>');
+  $('sumHints').innerHTML = hints.join('');
+}
+
+function renderReadiness(r, el) {
+  if (!r) { el.innerHTML = '<div class="banner warn">Keine Antwort auf die Bereitschaftsabfrage.</div>'; return; }
+  el.innerHTML = `
+    <div class="banner ${r.open ? 'warn' : 'ok'}" style="margin-bottom:10px">${r.open
+      ? `<div><b>${r.open} Selbsttest${r.open > 1 ? 's' : ''} noch offen.</b> Ein paar gemischte Fahrten (Stadt, Landstraße, 10–15 min konstant Autobahn) fahren und erneut prüfen. Bei der AU darf meist höchstens ein Test offen sein.</div>`
+      : '<div><b>Alle Selbsttests abgeschlossen</b> – bereit für die Abgasuntersuchung.</div>'}</div>
+    <p class="muted">${r.diesel ? 'Dieselmotor' : 'Benzinmotor'} · Motorkontrollleuchte: <b>${r.mil ? 'an' : 'aus'}</b> · gespeicherte Abgas-Codes: <b>${r.count}</b></p>
+    <div class="ready-list">${r.tests.map((t) => `<div class="ready"><span class="st ${t.done ? 'ok' : 'open'}">${t.done ? '✓' : '…'}</span>${t.name}</div>`).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Actions
+// ---------------------------------------------------------------------------
+function quickCheck() {
+  return exclusive('Schnelltest: verbinde mit Motorsteuergerät …', async () => {
+    if (!(await ensureObd())) return;
+    setBusy('Schnelltest: Batterie und Bereitschaft …');
+    await readVoltage();
+    lastReady = await readReadiness();
+    setBusy('Schnelltest: Fehlerspeicher …');
+    const stored = parseDtcs(await send('03', 15000), 0x43);
+    const pending = parseDtcs(await send('07', 15000), 0x47);
+    const permanent = parseDtcs(await send('0A', 15000), 0x4A);
+    let ff = null;
+    if (stored.length) { setBusy('Schnelltest: Umgebungsbedingungen …'); ff = await readFreezeFrame(); }
+    const prev = lastHistory('obd');
+    lastObd = { stored, pending, permanent, ff };
+    addHistory('obd', [...new Set([...stored, ...pending, ...permanent])]);
+    renderObd(lastObd, prev);
+    renderReadiness(lastReady, $('readyResult'));
+    updateSummary();
+  });
+}
+
+function bmwScan() { return exclusive('Suche Steuergeräte …', bmwScanInner); }
+
 // Clearing needs a second tap within 5 s; no confirm() because not every iOS
 // Bluetooth browser shows native dialogs.
-const CLEAR_LABEL = 'Fehlerspeicher löschen';
 let clearArmedAt = 0;
-
-document.querySelectorAll('[data-cmd]').forEach((b) => b.addEventListener('click', async () => {
-  const cmd = b.dataset.cmd;
-  if (cmd === 'clear') {
-    if (Date.now() - clearArmedAt > 5000) {
-      clearArmedAt = Date.now();
-      b.textContent = 'Sicher? Nochmal tippen zum Löschen';
-      setTimeout(() => { if (Date.now() - clearArmedAt >= 5000) b.textContent = CLEAR_LABEL; }, 5000);
-      return;
-    }
-    clearArmedAt = 0;
-    b.textContent = CLEAR_LABEL;
+function clearClick() {
+  const b = $('clearBtn');
+  if (Date.now() - clearArmedAt > 5000) {
+    clearArmedAt = Date.now();
+    b.classList.add('armed');
+    $('clearLabel').textContent = 'Sicher? Nochmal tippen';
+    $('clearSub').textContent = 'Löscht alle Steuergeräte. Kann auch die AU-Bereitschaft zurücksetzen.';
+    setTimeout(() => { if (Date.now() - clearArmedAt >= 5000) resetClear(); }, 5000);
+    return;
   }
-  b.disabled = true;
-  try {
-    if (cmd === 'init') await init();
-    else if (cmd === 'dtc') await readDtcs();
-    else if (cmd === 'vin') await readVin();
-    else if (cmd === 'bmw') await bmwScan();
-    else if (cmd === 'clear') await bmwClear();
-    else await send(cmd, 10000);
-  } finally { b.disabled = false; }
-}));
+  resetClear();
+  exclusive('Lösche Fehlerspeicher …', bmwClear);
+}
+function resetClear() {
+  clearArmedAt = 0;
+  $('clearBtn').classList.remove('armed');
+  $('clearLabel').textContent = 'Fehler löschen';
+  $('clearSub').textContent = 'Alle Steuergeräte · zum Bestätigen zweimal tippen';
+}
 
-$('send').addEventListener('click', async () => {
+function batteryCheck() {
+  return exclusive('Messe Spannung …', async () => {
+    const running = document.querySelector('input[name=battMode]:checked').value === 'run';
+    const v = await readVoltage();
+    if (v == null) { $('battResult').innerHTML = '<div class="banner warn">Der Adapter liefert keine Spannung (ATRV).</div>'; return; }
+    const [cls, title, text] = batteryVerdict(v, running);
+    $('battResult').innerHTML = `<div class="banner ${cls}"><div><b style="font-size:20px">${fmt(v, 1)} V</b> · <b>${title}</b><br>${text}</div></div>`;
+    updateSummary();
+  });
+}
+
+function readinessCheck() {
+  return exclusive('Prüfe AU-Bereitschaft …', async () => {
+    if (!(await ensureObd())) return;
+    lastReady = await readReadiness();
+    renderReadiness(lastReady, $('readyResult'));
+    updateSummary();
+  });
+}
+
+function vehicleInfo() {
+  return exclusive('Lese Fahrzeugdaten …', async () => {
+    if (!(await ensureObd())) return;
+    const vin = await readInfoString(0x02);
+    const cal = await readInfoString(0x04);
+    const name = await readInfoString(0x0A);
+    const dist = await readPid(0x31, false);
+    const rows = [
+      ['Fahrgestellnummer (VIN)', vin.length >= 17 ? vin.slice(-17) : vin || '–'],
+      ['Motor-Software (Kalibrierung)', cal || '–'],
+      ['Motorsteuergerät', name || '–'],
+      ['Gefahren seit Fehler-Löschen', dist == null ? '–' : `${fmt(dist)} km`],
+    ];
+    $('vehResult').innerHTML = `<table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td class="mono"><b>${esc(v)}</b></td></tr>`).join('')}</table>`;
+    if (vin) log(`VIN: ${vin}`);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Live data
+// ---------------------------------------------------------------------------
+let liveOn = false, liveLoop = null, liveSupported = null;
+
+function gaugeHtml(pid) {
+  const d = PIDS[pid];
+  return `<div class="gauge" id="g${pid}">
+    <svg viewBox="0 0 120 104"><path class="track" d="M24.6 95.4A50 50 0 1 1 95.4 95.4"/><path class="val" pathLength="100" d="M24.6 95.4A50 50 0 1 1 95.4 95.4"/></svg>
+    <div class="readout"><b>–</b><small>${d.unit}</small></div><div class="label">${d.name}</div></div>`;
+}
+function tileHtml(pid) {
+  const d = PIDS[pid];
+  return `<div class="tile" id="t${pid}"><small>${d.name}</small><b>–</b><i>${d.unit}</i><div class="meter"><span></span></div></div>`;
+}
+
+function buildLive(sup) {
+  const g = GAUGE_PIDS.filter((p) => sup.has(p));
+  const t = Object.keys(PIDS).map(Number).filter((p) => sup.has(p) && !g.includes(p));
+  $('gauges').innerHTML = g.map(gaugeHtml).join('');
+  $('tiles').innerHTML = t.map(tileHtml).join('');
+  $('liveEmpty').hidden = g.length + t.length > 0;
+  if (!g.length && !t.length) $('liveEmpty').textContent = 'Das Motorsteuergerät meldet keine bekannten Live-Werte.';
+}
+
+function showValue(pid, v) {
+  const d = PIDS[pid];
+  const pct = Math.max(0, Math.min(100, ((v - d.min) / (d.max - d.min)) * 100));
+  const level = (d.warn != null && v >= d.warn) || (d.warnAbs != null && Math.abs(v) >= d.warnAbs) ? 'warn' : '';
+  const g = $(`g${pid}`);
+  if (g) {
+    g.querySelector('.val').style.strokeDashoffset = 100 - pct;
+    g.querySelector('b').textContent = fmt(v, d.dec);
+    g.className = `gauge ${level}`;
+    return;
+  }
+  const t = $(`t${pid}`);
+  if (t) {
+    t.querySelector('b').textContent = fmt(v, d.dec);
+    t.querySelector('b').style.color = level ? 'var(--warn)' : '';
+    t.querySelector('.meter span').style.width = `${pct}%`;
+  }
+}
+
+async function startLive() {
+  if (liveOn) { await stopLive(); return; }
+  const ok = await exclusive('Live-Daten vorbereiten …', async () => {
+    if (!(await ensureObd())) return false;
+    if (!liveSupported) liveSupported = await supportedPids();
+    return true;
+  });
+  if (!ok) return;
+  buildLive(liveSupported);
+  liveOn = true;
+  $('liveToggle').textContent = 'Live-Daten stoppen';
+  $('liveToggle').classList.remove('primary');
+  liveLoop = runLive();
+}
+
+async function runLive() {
+  const fast = FAST_PIDS.filter((p) => liveSupported.has(p) && PIDS[p]);
+  const slow = Object.keys(PIDS).map(Number).filter((p) => liveSupported.has(p) && !fast.includes(p));
+  const fails = {};
+  let i = 0, misses = 0, cycles = 0, since = Date.now(), first = true;
+  log('Live-Daten gestartet.');
+  while (liveOn && linked) {
+    // First round fills every value; after that slow values rotate one per round.
+    const batch = (first ? [...fast, ...slow] : [...fast, ...(slow.length ? [slow[i++ % slow.length]] : [])])
+      .filter((p) => (fails[p] || 0) < 3);
+    first = false;
+    if (!batch.length) break;
+    for (const pid of batch) {
+      if (!liveOn) break;
+      const v = await readPid(pid);
+      if (v == null) { fails[pid] = (fails[pid] || 0) + 1; misses++; } else { fails[pid] = 0; misses = 0; showValue(pid, v); }
+      if (misses > 8) { log('Live-Daten: keine Antworten mehr – gestoppt.'); liveOn = false; }
+    }
+    cycles++;
+    if (Date.now() - since > 3000) {
+      $('liveRate').textContent = `${fmt(cycles / ((Date.now() - since) / 1000), 1)} Aktualisierungen/s`;
+      cycles = 0; since = Date.now();
+    }
+  }
+  liveOn = false;
+  $('liveToggle').textContent = 'Live-Daten starten';
+  $('liveToggle').classList.add('primary');
+  $('liveRate').textContent = '';
+  log('Live-Daten gestoppt.');
+}
+
+async function stopLive() {
+  if (!liveLoop) return;
+  liveOn = false;
+  await liveLoop;
+  liveLoop = null;
+}
+
+// ---------------------------------------------------------------------------
+// Expert: ECU identification and UDS console
+// ---------------------------------------------------------------------------
+const IDENT_DIDS = { F190: 'Fahrgestellnummer', F18C: 'Seriennummer', F187: 'Teilenummer', F189: 'Software-Version', F18A: 'Lieferant', F197: 'Systemname' };
+const printable = (bytes) => bytes.length && bytes.every((b) => (b >= 0x20 && b < 0x7f) || b === 0);
+const asText = (bytes) => printable(bytes) ? String.fromCharCode(...bytes.filter(Boolean)).trim() : bytes.map(hex2).join(' ');
+
+function ecuIdent() {
+  return exclusive('Identifiziere Steuergeräte …', async () => {
+    if (!(await bmwSetup())) return;
+    const ecus = lastEcus.length ? lastEcus : await bmwDiscover();
+    lastEcus = ecus;
+    fillEcuSelect();
+    const out = $('identResult');
+    out.innerHTML = '';
+    for (const ecu of ecus) {
+      setBusy(`Identifiziere ${ecuName(ecu)} …`);
+      const rows = [];
+      for (const [did, label] of Object.entries(IDENT_DIDS)) {
+        const r = await bmwRequest(ecu, '22', did.slice(0, 2), did.slice(2));
+        if (r?.complete && r.data[0] === 0x62) rows.push([label, asText(r.data.slice(3))]);
+      }
+      out.insertAdjacentHTML('beforeend', `<div class="ecu" style="margin-bottom:8px"><div class="ecu-head"><b>${esc(ecuName(ecu))}</b><span class="muted mono">0x${ecu}</span></div>
+        ${rows.length ? `<table class="kv">${rows.map(([k, v]) => `<tr><td>${k}</td><td class="mono">${esc(v)}</td></tr>`).join('')}</table>` : '<p class="muted">Keine Standard-Kennungen lesbar.</p>'}</div>`);
+    }
+    if (!ecus.length) out.innerHTML = '<div class="banner warn">Keine Steuergeräte gefunden.</div>';
+    await bmwDone();
+  });
+}
+
+const NRC = {
+  0x10: 'Allgemeine Ablehnung', 0x11: 'Dienst nicht unterstützt', 0x12: 'Unterfunktion nicht unterstützt',
+  0x13: 'Falsche Länge/Format', 0x14: 'Antwort zu lang', 0x21: 'Beschäftigt – später wiederholen',
+  0x22: 'Bedingungen nicht erfüllt (z. B. Motor läuft, Zündung)', 0x24: 'Falsche Reihenfolge', 0x31: 'Wert außerhalb des Bereichs / nicht unterstützt',
+  0x33: 'Zugriff verweigert (Security Access nötig)', 0x35: 'Falscher Schlüssel', 0x36: 'Zu viele Versuche',
+  0x37: 'Wartezeit nicht abgelaufen', 0x72: 'Programmierfehler', 0x78: 'Antwort folgt',
+  0x7E: 'Unterfunktion in dieser Sitzung nicht unterstützt', 0x7F: 'Dienst in dieser Sitzung nicht unterstützt',
+};
+const UDS_READ = new Set([0x19, 0x22, 0x3E, 0x1A, 0x21, 0x17, 0x18]);
+const UDS_NEVER = new Set([0x34, 0x35, 0x36, 0x37, 0x38, 0x3D]);
+
+function fillEcuSelect() {
+  const sel = $('udsEcu');
+  const cur = sel.value;
+  const ids = [...new Set([...Object.keys(ECU_NAMES), ...lastEcus])].sort();
+  sel.innerHTML = ids.map((e) => `<option value="${e}">0x${e} · ${esc(ecuName(e))}${lastEcus.includes(e) ? ' ✓' : ''}</option>`).join('');
+  sel.value = cur || '12';
+}
+
+function udsSend() {
+  const ecu = $('udsEcu').value;
+  const bytes = $('udsReq').value.toUpperCase().replace(/[^0-9A-F]/g, '').match(/../g) || [];
+  const out = $('udsOut');
+  if (!bytes.length || bytes.length > 6) { out.textContent = 'Bitte 1 bis 6 Bytes hex eingeben, z. B. 22 F1 90.'; return; }
+  const sid = parseInt(bytes[0], 16);
+  if (UDS_NEVER.has(sid)) { out.textContent = `Dienst 0x${bytes[0]} (Flash/Speicher schreiben) ist gesperrt.`; return; }
+  if (!UDS_READ.has(sid) && !$('udsUnlock').checked) {
+    out.textContent = `Dienst 0x${bytes[0]} kann etwas im Auto verändern. Zum Senden „Schreibende Befehle erlauben“ aktivieren.`;
+    return;
+  }
+  exclusive(`UDS an ${ecuName(ecu)} …`, async () => {
+    if (busMode !== 'bmw' && !(await bmwSetup())) { out.textContent = 'Adapter nicht bereit.'; return; }
+    log(`UDS 0x${ecu} -> ${bytes.join(' ')}`);
+    const r = await bmwRequest(ecu, ...bytes);
+    let text = `→ 0x${ecu} ${ecuName(ecu)}: ${bytes.join(' ')}\n`;
+    if (!r) text += '← keine Antwort';
+    else {
+      const d = r.data;
+      text += `← ${d.map(hex2).join(' ')}${r.complete ? '' : ' (unvollständig)'}\n`;
+      if (d[0] === 0x7F) text += `Negative Antwort: ${NRC[d[2]] || 'unbekannt'} (0x${hex2(d[2])})`;
+      else if (d[0] === sid + 0x40) {
+        text += 'Positive Antwort';
+        const body = d.slice(sid === 0x22 ? 3 : 1);
+        if (printable(body)) text += `\nText: ${asText(body)}`;
+        if (sid === 0x19 && d[1] === 0x02) text += `\n${(bmwDtcs(d) || []).map((x) => `${x.code} ${x.active ? 'aktiv' : 'gespeichert'}`).join('\n') || 'keine Fehler'}`;
+      }
+    }
+    out.textContent = text;
+    log(text.replace(/\n/g, ' | '));
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Catalog tab
+// ---------------------------------------------------------------------------
+let catalogCodes = null;
+function allCatalogCodes() {
+  if (!catalogCodes) {
+    catalogCodes = Object.keys(DTC_CATALOG);
+    for (let n = 0; n < 1000; n++) {
+      const c = `P0${String(n).padStart(3, '0')}`;
+      if (!DTC_CATALOG[c] && dtcFamily(c)) catalogCodes.push(c);
+    }
+  }
+  return catalogCodes;
+}
+
+function catalogSearch() {
+  const q = $('catSearch').value.trim();
+  const box = $('catResults');
+  if (!q) {
+    box.innerHTML = '<p class="empty">Gib einen Code oder ein Stichwort ein. Beispiele: <b>P0171</b>, <b>P0301</b>, <b>Lambda</b>, <b>Turbo</b>, <b>Thermostat</b>.</p>';
+    return;
+  }
+  const code = q.toUpperCase().replace(/\s/g, '');
+  if (/^[PCBU][0-3][0-9A-F]{3}$/.test(code)) { box.innerHTML = dtcCard(code); box.querySelector('details').open = true; return; }
+  if (/^[0-9A-F]{6}$/.test(code)) {
+    box.innerHTML = `<details class="dtc" open><summary><span class="code">${code}</span><span class="dtc-title">${esc((notes()[code] || 'BMW-Herstellercode').split('\n')[0])}</span><span class="sev unbekannt">BMW</span></summary>
+      <div class="dtc-body"><p>BMW-Codes sind herstellerspezifisch; einen offiziellen Text gibt es nur in der BMW-Software. In welchem Steuergerät er steht, zeigt der Komplett-Scan.</p>${noteUi(code)}</div></details>`;
+    return;
+  }
+  const words = q.toLowerCase().split(/\s+/);
+  const hits = allCatalogCodes().filter((c) => {
+    const d = describeDtc(c);
+    const hay = `${c} ${d.title} ${d.causes.join(' ')} ${d.hint} ${notes()[c] || ''}`.toLowerCase();
+    return words.every((w) => hay.includes(w));
+  }).sort();
+  box.innerHTML = hits.length ? hits.slice(0, 60).map((c) => dtcCard(c)).join('') + (hits.length > 60 ? `<p class="muted">… und ${hits.length - 60} weitere. Suche genauer eingrenzen.</p>` : '')
+    : '<p class="empty">Nichts gefunden.</p>';
+}
+
+// ---------------------------------------------------------------------------
+// Wiring
+// ---------------------------------------------------------------------------
+document.querySelectorAll('#nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+$('connect').addEventListener('click', connect);
+$('demo').addEventListener('click', () => {
+  sim = makeSim();
+  log('Demo-Modus: simulierter Adapter, alle Werte sind erfunden.');
+  setStatus('Demo-Modus', 'ok demo');
+  setConnected(true);
+  exclusive('Lese Bordspannung …', readVoltage);
+  toast('Demo-Modus aktiv – alle Werte sind simuliert.');
+});
+$('disconnect').addEventListener('click', () => {
+  if (sim) { sim = null; log('Demo beendet.'); setStatus('Nicht verbunden'); setConnected(false); $('battPill').hidden = true; return; }
+  device?.gatt?.disconnect();
+});
+$('quick').addEventListener('click', quickCheck);
+$('bmwScan').addEventListener('click', bmwScan);
+$('clearBtn').addEventListener('click', clearClick);
+$('battBtn').addEventListener('click', batteryCheck);
+$('readyBtn').addEventListener('click', readinessCheck);
+$('vehBtn').addEventListener('click', vehicleInfo);
+$('liveToggle').addEventListener('click', startLive);
+$('identBtn').addEventListener('click', ecuIdent);
+$('udsSend').addEventListener('click', udsSend);
+$('udsReq').addEventListener('keydown', (e) => { if (e.key === 'Enter') udsSend(); });
+document.querySelectorAll('[data-uds]').forEach((b) => b.addEventListener('click', () => { $('udsReq').value = b.dataset.uds; }));
+document.querySelectorAll('[data-raw]').forEach((b) => b.addEventListener('click', () => { $('raw').value = b.dataset.raw; }));
+$('send').addEventListener('click', () => {
   const v = $('raw').value.trim();
-  if (v) await send(v, 10000);
+  if (!v) return;
+  // A manual command can change the adapter state, so the next generic or BMW
+  // function sets the adapter up again.
+  exclusive(`Sende ${v} …`, async () => { await send(v, 10000); busMode = null; protocol = null; toast('Antwort im Protokoll.'); });
 });
 $('raw').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('send').click(); });
-$('connect').addEventListener('click', connect);
-$('disconnect').addEventListener('click', () => device?.gatt?.disconnect());
 $('clear').addEventListener('click', () => { logEl.textContent = ''; });
 $('copy').addEventListener('click', async () => {
-  try { await navigator.clipboard.writeText(logEl.textContent); log('Protokoll kopiert.'); }
-  catch { log('Kopieren nicht möglich – bitte Text markieren.'); }
+  try { await navigator.clipboard.writeText(logEl.textContent); toast('Protokoll kopiert.'); }
+  catch { toast('Kopieren nicht möglich – bitte Text markieren.'); }
+});
+$('histClear').addEventListener('click', () => { store.set('obd.history', []); renderHistory(); });
+$('catSearch').addEventListener('input', catalogSearch);
+// Notes are saved per code; BMW codes are keyed by ECU so the same hex code in
+// two control units can carry different notes.
+document.addEventListener('click', (e) => {
+  const key = e.target.closest('[data-save-note]')?.dataset.saveNote;
+  if (!key) return;
+  const box = [...document.querySelectorAll('textarea[data-note]')].find((t) => t.dataset.note === key && t.closest('details') === e.target.closest('details'));
+  const all = notes();
+  const text = box ? box.value.trim() : '';
+  if (text) all[key] = text; else delete all[key];
+  store.set('obd.notes', all);
+  toast(text ? 'Notiz gespeichert.' : 'Notiz entfernt.');
 });
 
+$('ver').textContent = `${VERSION} · Bluetooth-OBD`;
+$('extra').value = store.get('obd.extra', '');
+$('catCount').textContent = `${Object.keys(DTC_CATALOG).length} Einträge + Zylinder-/Sensor-Familien`;
+fillEcuSelect();
+renderHistory();
+catalogSearch();
+showTab(store.get('obd.tab', 'diag'));
 log(`Seitenversion ${VERSION}`);
-log(navigator.bluetooth ? 'Web Bluetooth verfügbar.' : 'Web Bluetooth NICHT verfügbar (Safari/Firefox). Bluefy oder Chrome nutzen.');
+log(navigator.bluetooth ? 'Web Bluetooth verfügbar.' : 'Web Bluetooth NICHT verfügbar (Safari/Firefox). Bluefy oder Chrome nutzen – oder „Demo ohne Auto“.');
 </script>
 </body>
 </html>
